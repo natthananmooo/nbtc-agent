@@ -50,17 +50,38 @@ python3 01_fetch_explore.py     # ดึงข้อมูลจาก CKAN API 
 python3 02_build_db.py          # สร้าง data/complaints.db
 ```
 
-### 2. เปิด MCP Server
-
-```bash
-docker compose up -d --build
-docker compose logs -f mcp      # ดูว่าขึ้นแล้ว
-```
-
-### 3. ตั้งค่าและรัน agent
+### 2. ใส่คีย์
 
 ```bash
 cp .env.example .env            # แล้วใส่ OPENROUTER_API_KEY
+```
+
+ต้องมีไฟล์ `.env` ก่อน ไม่งั้น `docker compose` จะไม่ยอมขึ้น
+
+### 3. เปิดทั้งระบบ
+
+```bash
+docker compose up -d --build
+```
+
+ได้สองอย่างพร้อมกัน ทั้งคู่รันเบื้องหลัง ปิด Terminal ได้
+
+| | ที่อยู่ | ทำอะไร |
+| --- | --- | --- |
+| หน้าเว็บ | http://localhost:8080 | ถามคำถาม เห็นคำตอบพร้อมแถบบอกว่าไปค้นอะไรมา |
+| MCP Server | http://localhost:8000/mcp | ให้บริการ tool ทั้งสี่ตัว |
+
+ดูการทำงานสด ๆ ว่า agent เรียก tool อะไรด้วยพารามิเตอร์ไหน
+
+```bash
+docker compose logs -f mcp
+docker compose ps              # ดูสถานะ
+docker compose down            # ปิด
+```
+
+### 4. ถามผ่าน terminal (ถ้าไม่อยากใช้หน้าเว็บ)
+
+```bash
 pip install -r requirements.txt
 
 python3 agent.py                            # โหมดถาม-ตอบ

@@ -70,6 +70,39 @@ def _log_call(name: str, args: dict, result, started: float):
     print("%s  %.0f ms" % (line, ms), file=sys.stderr, flush=True)
 
 
+# ------------------------------------------------------- ผลลัพธ์ที่อ้างถึงได้
+# เดิม analyze_results กับ render_chart ต้องให้โมเดลก๊อป rows ทั้งก้อนส่งกลับมา
+# ซึ่งพลาดง่ายมาก ของจริงพบว่าโมเดลส่งสตริง "{%call_result%...}" มาแทนข้อมูล
+# จึงเก็บผลไว้ฝั่ง server แล้วให้อ้างด้วย result_id สั้น ๆ แทน
+_RESULTS: dict[str, dict] = {}
+_RESULT_ORDER: list[str] = []
+_KEEP = 20
+
+
+def _remember(payload: dict) -> str:
+    rid = "r%d" % (len(_RESULT_ORDER) + 1)
+    _RESULTS[rid] = payload
+    _RESULT_ORDER.append(rid)
+    while len(_RESULT_ORDER) > _KEEP:
+        _RESULTS.pop(_RESULT_ORDER.pop(0), None)
+    return rid
+
+
+def _rows_from(result_id, rows):
+    """คืน (rows, warnings, ข้อความผิดพลาด)"""
+    if result_id:
+        got = _RESULTS.get(result_id)
+        if got is None:
+            return None, None, ("ไม่พบ result_id %r ที่มีอยู่คือ %s"
+                                % (result_id, ", ".join(_RESULT_ORDER) or "ยังไม่มี"))
+        return got["rows"], got.get("warnings", []), None
+    if isinstance(rows, list) and all(isinstance(r, dict) for r in rows):
+        return rows, None, None
+    return None, None, ("rows ต้องเป็นลิสต์ของ object ที่ได้จาก query_complaints "
+                        "ห้ามส่งข้อความอ้างอิงอย่าง {%call_result%...} "
+                        "วิธีที่ง่ายกว่าคือใส่ result_id ที่ query_complaints คืนมา")
+
+
 def _recoverable(err: Exception, how_to_fix: str, **hints) -> dict:
     return {
         "ok": False,
@@ -99,8 +132,12 @@ def resolve_filter_values(user_phrase: str, field: str | None = None) -> dict:
     หรือพื้นที่ เพราะคำที่คนพูดมักไม่ตรงกับค่าที่เก็บจริง เช่น ผู้ใช้พิมพ์ AIS
     แต่ฐานข้อมูลเก็บว่า บริษัท แอดวานซ์ ไวร์เลส เน็ทเวอร์ค จำกัด
 
+    ผลลัพธ์มีฟิลด์ use_in_filters ที่พร้อมใช้ ให้ก๊อปไปใส่ filters ของ query_complaints
+    ทั้งก้อน ห้ามหยิบไปแค่ค่าเดียว เช่น AIS มี 4 บริษัทในเครือ ต้องใส่ครบทั้ง 4
+    ถ้าใส่ไม่ครบ ตัวเลขจะผิดและห้ามอ้างว่ารวมบริษัทที่ไม่ได้ใส่
+
     ดูค่า confidence ที่คืนมาแล้วทำตามนี้
-      high      ใช้ค่าที่ได้ และบอกผู้ใช้ว่าใช้ค่าอะไร
+      high      ใช้ use_in_filters ที่ให้มา และบอกผู้ใช้ว่าใช้ค่าอะไรบ้าง
       ambiguous ห้ามเดา ให้ถามผู้ใช้ว่าหมายถึงตัวเลือกไหน พร้อมบอกจำนวนเรื่องของแต่ละตัว
       none      ไม่มีค่านี้ในฐานข้อมูล ให้ถามผู้ใช้ใหม่ หรือบอกว่าไม่มีข้อมูล
 
@@ -166,6 +203,9 @@ def query_complaints(
                "filters ต้องเป็น dict ชื่อคอลัมน์ไปหาลิสต์ของค่า "
                "date_from และ date_to ต้องเป็น YYYY-MM-DD โดยปีเป็น พ.ศ.",
             valid_columns=list(_db.DIMENSIONS), valid_metrics=list(_db.MEASURES))
+    if isinstance(out, dict) and out.get("ok") is not False:
+        out["result_id"] = _remember({"rows": out.get("rows", []),
+                                      "warnings": out.get("warnings", [])})
     _log_call("query_complaints",
               {"metric": metric, "group_by": group_by, "filters": filters,
                "date_from": date_from, "date_to": date_to,
@@ -175,65 +215,81 @@ def query_complaints(
 
 @mcp.tool()
 def analyze_results(
-    rows: list[dict],
+    result_id: str | None = None,
+    rows: list[dict] | None = None,
     question: str = "",
     mode: str = "summary",
-    warnings: list[str] | None = None,
 ) -> dict:
     """สรุปตัวเลขจากผลลัพธ์ของ query_complaints ด้วยการคำนวณ ไม่ใช่การประมาณ
 
-    ส่ง warnings ที่ได้จาก query_complaints เข้ามาด้วย เพื่อให้ caveats ครบ
+    วิธีที่ถูกต้องคือใส่ result_id ที่ query_complaints คืนมา
+    ไม่ต้องก๊อป rows กลับมาเอง และ warnings จะถูกดึงมาให้อัตโนมัติ
 
     Args:
-        rows: ผลลัพธ์จาก query_complaints
+        result_id: รหัสผลลัพธ์จาก query_complaints เช่น r1
+        rows: ใส่แทน result_id ได้ ต้องเป็นลิสต์ของ object จริงเท่านั้น
         question: คำถามเดิมของผู้ใช้
         mode: summary, trend (ใช้กับข้อมูลรายปีรายเดือน), compare หรือ share
-        warnings: warnings ที่ query_complaints คืนมา
     """
     t0 = time.time()
-    try:
-        out = _analyze(rows, question, mode, warnings)
-    except Exception as e:
-        out = _recoverable(
-            e, "ส่ง rows ที่ได้จาก query_complaints มาตรง ๆ และ mode ต้องเป็นหนึ่งใน "
-               "summary, trend, compare, share",
-            valid_modes=["summary", "trend", "compare", "share"])
-    _log_call("analyze_results", {"mode": mode, "rows": len(rows or [])}, out, t0)
+    data, warns, err = _rows_from(result_id, rows)
+    if err:
+        out = {"ok": False, "error": err,
+               "how_to_fix": "เรียก query_complaints ก่อน แล้วส่ง result_id ที่ได้มาที่นี่",
+               "available_result_ids": list(_RESULT_ORDER)}
+    else:
+        try:
+            out = _analyze(data, question, mode, warns)
+        except Exception as e:
+            out = _recoverable(
+                e, "mode ต้องเป็นหนึ่งใน summary, trend, compare, share",
+                valid_modes=["summary", "trend", "compare", "share"])
+    _log_call("analyze_results",
+              {"result_id": result_id, "mode": mode, "rows": len(data or [])}, out, t0)
     return out
 
 
 @mcp.tool()
 def render_chart(
-    rows: list[dict],
     chart_type: str,
     x: str,
     y: str,
     title: str,
+    result_id: str | None = None,
+    rows: list[dict] | None = None,
     filename: str | None = None,
 ) -> dict:
     """วาดกราฟจากผลลัพธ์ แล้วคืน path ของไฟล์ภาพ
 
     เรียกเมื่อผู้ใช้ขอกราฟเท่านั้น ถ้าไม่ได้ขอก็ตอบเป็นข้อความพอ
+    ใส่ result_id ที่ query_complaints คืนมา ไม่ต้องก๊อป rows
 
     Args:
-        rows: ผลลัพธ์จาก query_complaints
-        chart_type: bar, barh, line หรือ pie
+        chart_type: bar, barh, line หรือ pie (ไม่มีสามมิติ)
         x: ชื่อคอลัมน์หมวดหมู่ เช่น province
         y: ชื่อคอลัมน์ตัวเลข เช่น count
         title: หัวกราฟ
-        filename: ตั้งชื่อไฟล์เองได้ ถ้าไม่ระบุจะตั้งให้
+        result_id: รหัสผลลัพธ์จาก query_complaints เช่น r1
+        rows: ใส่แทน result_id ได้ ต้องเป็นลิสต์ของ object จริงเท่านั้น
+        filename: ตั้งชื่อไฟล์เองได้
     """
     t0 = time.time()
-    try:
-        out = _chart(rows, chart_type, x, y, title, filename)
-    except Exception as e:
-        cols = list(rows[0]) if rows else []
-        out = _recoverable(
-            e, "x และ y ต้องเป็นชื่อคอลัมน์ที่มีอยู่จริงใน rows "
-               "และ chart_type ต้องเป็นหนึ่งใน bar, barh, line, pie",
-            columns_in_rows=cols, valid_chart_types=["bar", "barh", "line", "pie"])
+    data, _, err = _rows_from(result_id, rows)
+    if err:
+        out = {"ok": False, "error": err,
+               "how_to_fix": "เรียก query_complaints ก่อน แล้วส่ง result_id ที่ได้มาที่นี่",
+               "available_result_ids": list(_RESULT_ORDER)}
+    else:
+        try:
+            out = _chart(data, chart_type, x, y, title, filename)
+        except Exception as e:
+            out = _recoverable(
+                e, "x และ y ต้องเป็นชื่อคอลัมน์ที่มีอยู่จริงใน rows "
+                   "และ chart_type ต้องเป็นหนึ่งใน bar, barh, line, pie",
+                columns_in_rows=list(data[0]) if data else [],
+                valid_chart_types=["bar", "barh", "line", "pie"])
     _log_call("render_chart",
-              {"chart_type": chart_type, "x": x, "y": y, "rows": len(rows or [])}, out, t0)
+              {"result_id": result_id, "chart_type": chart_type, "x": x, "y": y}, out, t0)
     return out
 
 

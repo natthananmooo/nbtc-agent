@@ -89,6 +89,7 @@ def resolve_filter_values(user_phrase: str, field: str | None = None) -> dict:
     if field in ("year", "month"):
         return {
             "query": user_phrase, "field": field, "candidates": [],
+            "use_in_filters": None,
             "confidence": "none", "alias_group": None,
             "note": "คอลัมน์ %s เป็นตัวเลข ไม่ต้องใช้ tool นี้ "
                     "ใส่ใน filters ของ query_complaints ได้เลย "
@@ -109,6 +110,8 @@ def resolve_filter_values(user_phrase: str, field: str | None = None) -> dict:
                 "query": user_phrase,
                 "field": f,
                 "candidates": members,
+                # รายการที่ต้องใส่ใน filters ทั้งชุด ห้ามหยิบไปแค่ตัวเดียว
+                "use_in_filters": {f: [m["value"] for m in members]},
                 "confidence": "high",
                 "alias_group": user_phrase,
                 "note": "มาจาก aliases.yaml รวม %d รายการ %d เรื่อง "
@@ -131,6 +134,7 @@ def resolve_filter_values(user_phrase: str, field: str | None = None) -> dict:
             "query": user_phrase,
             "field": field,
             "candidates": [],
+            "use_in_filters": None,
             "confidence": "none",
             "alias_group": None,
             "note": "ไม่มีค่าไหนตรงพอ อย่าเดาเด็ดขาด ให้ถามผู้ใช้โดยเสนอค่าที่มีจริง "
@@ -155,6 +159,8 @@ def resolve_filter_values(user_phrase: str, field: str | None = None) -> dict:
         "query": user_phrase,
         "field": top_field,
         "candidates": cands,
+        # ใส่ให้เฉพาะตอนชัดเจน ถ้ากำกวมต้องถามผู้ใช้ก่อน ไม่ใช่หยิบไปใช้เอง
+        "use_in_filters": ({top_field: [cands[0]["value"]]} if conf == "high" else None),
         "confidence": conf,
         "alias_group": None,
         "note": note,

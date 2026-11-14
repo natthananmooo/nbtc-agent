@@ -1,4 +1,5 @@
 services:
+
   mcp:
     build:
       context: .
@@ -8,7 +9,26 @@ services:
       - "8000:8000"
     volumes:
       # ชั้นที่ 4 ของกลไกอ่านอย่างเดียว
-      # :ro ทำให้ kernel ปฏิเสธการเขียน และโปรเซส agent ไม่เห็นไฟล์นี้เลย
+      # :ro ทำให้ kernel ปฏิเสธการเขียน และโปรเซสอื่นไม่เห็นไฟล์นี้เลย
       - ./data/complaints.db:/data/complaints.db:ro
       - ./charts:/charts
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    container_name: nbtc-web
+    ports:
+      - "8080:8080"
+    # คีย์ OpenRouter และ Langfuse อ่านจาก .env ไม่ได้ copy เข้า image
+    env_file:
+      - .env
+    environment:
+      MCP_URL: http://mcp:8000/mcp
+    volumes:
+      # ให้เห็นกราฟที่ mcp วาดไว้
+      - ./charts:/charts
+    depends_on:
+      - mcp
     restart: unless-stopped

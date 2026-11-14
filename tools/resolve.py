@@ -107,7 +107,7 @@ def resolve_filter_values(user_phrase: str, field: str | None = None) -> dict:
         group = _aliases().get(f, {}).get(phrase)
         if group:
             counts = dict(_values(f))
-            members = [{"value": v, "score": 1.0, "rows": counts.get(v, 0)}
+            members = [{"value": v, "score": 1.0, "rows_all_years": counts.get(v, 0)}
                        for v in group if v in counts]
             return {
                 "query": user_phrase,
@@ -117,9 +117,12 @@ def resolve_filter_values(user_phrase: str, field: str | None = None) -> dict:
                 "use_in_filters": {f: [m["value"] for m in members]},
                 "confidence": "high",
                 "alias_group": user_phrase,
-                "note": "มาจาก aliases.yaml รวม %d รายการ %d เรื่อง "
-                        "ต้องแจ้งผู้ใช้ว่ารวมอะไรเข้าด้วยกันบ้าง"
-                        % (len(members), sum(m["rows"] for m in members)),
+                "note": "มาจาก aliases.yaml รวม %d รายการ "
+                        "ต้องแจ้งผู้ใช้ว่ารวมอะไรเข้าด้วยกันบ้าง "
+                        "ตัวเลข rows คือยอดรวมทุกปีของค่านั้นในฐานข้อมูล "
+                        "ไม่ใช่คำตอบของคำถาม ห้ามเอาไปบวกกันเองแล้วตอบ "
+                        "ต้องเรียก query_complaints ด้วย use_in_filters เสมอ"
+                        % len(members),
             }
 
     # --- 2. ค้นจากค่าจริงในฐานข้อมูล ---
@@ -146,13 +149,16 @@ def resolve_filter_values(user_phrase: str, field: str | None = None) -> dict:
 
     top_field = scored[0][1]
     same = [t for t in scored if t[1] == top_field][:MAX_CANDIDATES]
-    cands = [{"value": v, "score": round(s, 3), "rows": n} for s, _, v, n in same]
+    cands = [{"value": v, "score": round(s, 3), "rows_all_years": n}
+             for s, _, v, n in same]
 
     # --- 3. ตัดสิน confidence ---
     if cands[0]["score"] >= 0.85 and (
         len(cands) == 1 or cands[0]["score"] - cands[1]["score"] >= 0.15
     ):
-        conf, note = "high", "ตรงชัดเจน ใช้ค่านี้ได้ และบอกผู้ใช้ว่าใช้ค่าอะไร"
+        conf, note = "high", ("ตรงชัดเจน ใช้ค่านี้ได้ และบอกผู้ใช้ว่าใช้ค่าอะไร "
+                              "ตัวเลข rows คือยอดรวมทุกปีของค่านั้น ไม่ใช่คำตอบของคำถาม "
+                              "ต้องเรียก query_complaints ต่อเสมอ")
     else:
         conf, note = "ambiguous", (
             "ตรงได้หลายค่า ต้องถามผู้ใช้ว่าหมายถึงอันไหน "
@@ -193,4 +199,4 @@ if __name__ == "__main__":
         if r["alias_group"]:
             print("            alias:", r["note"].split(" ต้อง")[0])
         for c in r["candidates"][:4]:
-            print("            %.2f  %6d  %s" % (c["score"], c["rows"], c["value"]))
+            print("            %.2f  %6d  %s" % (c["score"], c["rows_all_years"], c["value"]))

@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import os
 import traceback
+import uuid
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -37,6 +38,44 @@ app.mount("/charts", StaticFiles(directory=str(CHART_DIR)), name="charts")
 
 class Ask(BaseModel):
     question: str
+    # ไอดีบทสนทนา หน้าเว็บส่งกลับมาเพื่อให้ agent จำคำถามก่อนหน้าได้
+    # ถ้าไม่ส่งมา ถือว่าเริ่มบทสนทนาใหม่
+    chat_id: str | None = None
+
+
+# เก็บประวัติไว้ฝั่ง server เพราะกลไกถามกลับจะไร้ประโยชน์ถ้าผู้ใช้ตอบกลับไม่ได้
+# agent ถามว่าหมายถึงบริษัทไหน แล้วผู้ใช้พิมพ์ "ข้อ 3" ต้องมีบริบทเดิมจึงจะเข้าใจ
+_CHATS: dict[str, list[dict]] = {}
+_CHAT_ORDER: list[str] = []
+_KEEP_CHATS = 50        # จำนวนบทสนทนาที่เก็บพร้อมกัน เกินนี้ทิ้งอันเก่าสุด
+_KEEP_TURNS = 24        # จำนวนข้อความย้อนหลัง ไม่รวม system กันไม่ให้ prompt ยาวเกิน
+
+
+def _history(chat_id: str | None, system: str) -> tuple[str, list[dict]]:
+    """คืนไอดีบทสนทนากับรายการข้อความ สร้างใหม่ถ้ายังไม่มี"""
+    if chat_id and chat_id in _CHATS:
+        msgs = _CHATS[chat_id]
+        msgs[0] = {"role": "system", "content": system}
+        return chat_id, msgs
+
+    cid = uuid.uuid4().hex[:12]
+    _CHATS[cid] = [{"role": "system", "content": system}]
+    _CHAT_ORDER.append(cid)
+    while len(_CHAT_ORDER) > _KEEP_CHATS:
+        _CHATS.pop(_CHAT_ORDER.pop(0), None)
+    return cid, _CHATS[cid]
+
+
+def _trim(msgs: list[dict]) -> None:
+    """ตัดข้อความเก่าทิ้ง แต่ห้ามตัดจนข้อความแรกเป็น tool ที่ไม่มี tool_calls นำหน้า
+    เพราะ OpenAI API จะปฏิเสธทั้งคำขอ"""
+    body = msgs[1:]
+    if len(body) <= _KEEP_TURNS:
+        return
+    body = body[-_KEEP_TURNS:]
+    while body and body[0].get("role") in ("tool", "assistant"):
+        body.pop(0)
+    msgs[1:] = body
 
 
 def _label(step: dict) -> dict:
@@ -141,8 +180,9 @@ async def ask(req: Ask):
 
         async with agent.open_session() as session:
             system, oa_tools = await agent.build_context(session)
-            messages = [{"role": "system", "content": system},
-                        {"role": "user", "content": req.question}]
+            chat_id, messages = _history(req.chat_id, system)
+            _trim(messages)
+            messages.append({"role": "user", "content": req.question})
             answer = await agent.run_turn(session, client, messages, oa_tools, req.question)
             steps = [_label(s) for s in tracer.context]
 
@@ -154,5 +194,6 @@ async def ask(req: Ask):
                 "steps": [_label(s) for s in tracer.context],
                 "mcp_url": agent.MCP_URL, "model": agent.MODEL}
 
-    return {"question": req.question, "answer": answer,
+    return {"question": req.question, "answer": answer, "chat_id": chat_id,
+            "turns": len([m for m in messages if m.get("role") == "user"]),
             "steps": steps, "model": agent.MODEL, "logged": tracer.enabled}

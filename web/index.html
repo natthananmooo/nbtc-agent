@@ -24,6 +24,8 @@
   .chip { padding:5px 11px; font-size:13px; border:1px solid var(--line);
           border-radius:999px; background:var(--card); cursor:pointer; color:var(--dim); }
   .chip:hover { border-color:var(--blue); color:var(--blue); }
+  #chatbar button { margin-left:8px; font-size:12px; padding:3px 9px; cursor:pointer;
+                    border:1px solid var(--line); border-radius:99px; background:#fff; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:12px;
           padding:18px 20px; margin-bottom:14px; }
   .answer { white-space:pre-wrap; font-size:15.5px; }
@@ -61,6 +63,7 @@
   </form>
 
   <div class="chips" id="chips"></div>
+  <div class="label" id="chatbar" style="margin:-18px 0 18px"></div>
   <div id="out"></div>
 </div>
 
@@ -159,6 +162,20 @@ function stepCard(s, i) {
     '<span class="how ' + cls + '">' + esc(s.how || '') + '</span></div>' + body + '</div>';
 }
 
+// เก็บไอดีบทสนทนาไว้ เพื่อให้ตอบกลับคำถามที่ agent ถามมาได้
+let chatId = null;
+
+function setChatBar(turns) {
+  const bar = document.getElementById('chatbar');
+  if (!chatId || !turns || turns < 2) { bar.innerHTML = ''; return; }
+  bar.innerHTML = 'กำลังคุยต่อเนื่อง ' + turns + ' คำถามในบทสนทนานี้ ' +
+    '<button type="button" id="newchat">เริ่มบทสนทนาใหม่</button>';
+  document.getElementById('newchat').onclick = () => {
+    chatId = null; setChatBar(0);
+    document.getElementById('out').innerHTML = '';
+  };
+}
+
 document.getElementById('f').onsubmit = async e => {
   e.preventDefault();
   const q = document.getElementById('q').value.trim();
@@ -169,9 +186,10 @@ document.getElementById('f').onsubmit = async e => {
   try {
     const r = await fetch('/api/ask', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({question: q})
+      body: JSON.stringify({question: q, chat_id: chatId})
     });
     const d = await r.json();
+    if (d.chat_id) { chatId = d.chat_id; setChatBar(d.turns); }
     if (d.error) {
       out.innerHTML = '<div class="card err"><strong>' + esc(d.error) + '</strong>' +
         (d.detail ? '<pre style="background:transparent;border:0;padding:8px 0 0;color:inherit">'

@@ -136,7 +136,20 @@ def render_chart(
 @mcp.resource("schema://values", mime_type="text/plain")
 def schema_values() -> str:
     """รายการค่าไม่ซ้ำของแต่ละคอลัมน์ และคำอธิบายโครงสร้างตาราง"""
-    lines = ["ตาราง complaints มี %d แถว" % _db.total_rows(), "", "คอลัมน์ที่กรองและจัดกลุ่มได้"]
+    years = _db.fetch("SELECT MIN(year) a, MAX(year) b FROM complaints WHERE year IS NOT NULL")[0]
+    per_year = _db.fetch(
+        "SELECT year, COUNT(*) n FROM complaints WHERE year IS NOT NULL GROUP BY year ORDER BY year")
+
+    lines = [
+        "ตาราง complaints มี %d แถว" % _db.total_rows(),
+        "",
+        "ปีที่มีข้อมูล เก็บเป็น ค.ศ. ตั้งแต่ %d ถึง %d" % (years["a"], years["b"]),
+        "  " + "  ".join("%d:%d" % (r["year"], r["n"]) for r in per_year),
+        "ผู้ใช้คนไทยมักพิมพ์เป็น พ.ศ. query_complaints แปลงให้อัตโนมัติ (พ.ศ. ลบ 543)",
+        "เดือนเก็บเป็นตัวเลข 1 ถึง 12",
+        "",
+        "คอลัมน์ที่กรองและจัดกลุ่มได้",
+    ]
     for col, desc in _db.DIMENSIONS.items():
         lines.append("  %-14s %s" % (col, desc))
     lines += ["", "ค่าที่วัดได้ (metric)"]

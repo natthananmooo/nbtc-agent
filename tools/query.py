@@ -18,7 +18,19 @@ MIN_DAYS = 0          # days_to_close ติดลบ 104 แถว ตัดอ
 NULL_WARN_AT = 0.05   # คอลัมน์ที่ใช้กรองแล้วว่างเกินนี้ ต้องเตือน
 
 
-def _filter_clauses(filters, date_from, date_to):
+def _to_ce(year):
+    """
+    ฐานข้อมูลเก็บปีเป็น ค.ศ. แต่คนไทยพิมพ์ พ.ศ.
+    ปีที่มากกว่า 2400 ถือว่าเป็น พ.ศ. แน่นอน เพราะชุดข้อมูลนี้เริ่มปี ค.ศ. 2009
+    """
+    try:
+        y = int(year)
+    except (TypeError, ValueError):
+        return year, False
+    return (y - 543, True) if y > 2400 else (y, False)
+
+
+def _filter_clauses(filters, date_from, date_to, warnings=None):
     """ชื่อคอลัมน์ผ่าน whitelist ค่าผ่าน ? เสมอ"""
     clauses, params = [], []
     for col, val in (filters or {}).items():
@@ -27,6 +39,13 @@ def _filter_clauses(filters, date_from, date_to):
         vals = [v for v in vals if v is not None]
         if not vals:
             continue
+        if c == "year":
+            converted = [_to_ce(v) for v in vals]
+            if any(flag for _, flag in converted) and warnings is not None:
+                warnings.append(
+                    "แปลงปี %s จาก พ.ศ. เป็น ค.ศ. %s ก่อนค้น ต้องบอกผู้ใช้ด้วย"
+                    % (vals, [y for y, _ in converted]))
+            vals = [y for y, _ in converted]
         clauses.append("%s IN (%s)" % (c, ",".join("?" * len(vals))))
         params.extend(vals)
     if date_from:
@@ -59,8 +78,8 @@ def query_complaints(
     """
     m = db.check_measure(metric)
     groups = [db.check_dimension(g) for g in (group_by or [])]
-    base, params = _filter_clauses(filters, date_from, date_to)
     warnings: list[str] = []
+    base, params = _filter_clauses(filters, date_from, date_to, warnings)
 
     # --- metric ---
     if m == "avg_days_to_close":

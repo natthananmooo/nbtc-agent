@@ -84,6 +84,18 @@ def resolve_filter_values(user_phrase: str, field: str | None = None) -> dict:
     field       : ระบุคอลัมน์ หรือเว้นไว้ให้ค้นทุกคอลัมน์
     """
     phrase = _norm(user_phrase)
+
+    # year กับ month เป็นตัวเลข ไม่ต้องแปลงอะไร ส่งเข้า filters ได้เลย
+    if field in ("year", "month"):
+        return {
+            "query": user_phrase, "field": field, "candidates": [],
+            "confidence": "none", "alias_group": None,
+            "note": "คอลัมน์ %s เป็นตัวเลข ไม่ต้องใช้ tool นี้ "
+                    "ใส่ใน filters ของ query_complaints ได้เลย "
+                    "ฐานข้อมูลเก็บปีเป็น ค.ศ. แต่ query_complaints แปลง พ.ศ. ให้อัตโนมัติ"
+                    % field,
+        }
+
     fields = [db.check_dimension(field)] if field else list(SEARCHABLE)
 
     # --- 1. ดูไฟล์ alias ที่คนเขียนไว้ก่อน ---

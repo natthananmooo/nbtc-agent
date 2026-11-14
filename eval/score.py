@@ -55,12 +55,30 @@ def _found(value: float, pool: list[float]) -> bool:
 
 
 # ------------------------------------------------------------- faithfulness
-def faithfulness(answer: str, context: list[dict]) -> tuple[float, list[float]]:
-    """คืน (คะแนน, รายการตัวเลขที่หาที่มาไม่ได้)"""
+# เลขข้อในรายการ ไม่ใช่การอ้างตัวเลข
+# คำตอบแบบ "1. กรุงเทพมหานคร 798" เลข 1 เป็นลำดับ ส่วน 798 คือสิ่งที่ต้องตรวจ
+LIST_MARKER = re.compile(r"(?m)^\s*(\d{1,2})[\.\)]\s")
+
+
+def _strip_list_markers(text: str) -> str:
+    return LIST_MARKER.sub(" ", text or "")
+
+
+def faithfulness(answer: str, context: list[dict],
+                 schema: str = "") -> tuple[float, list[float]]:
+    """คืน (คะแนน, รายการตัวเลขที่หาที่มาไม่ได้)
+
+    context  ผลลัพธ์ที่ได้จาก tool ในรอบนี้
+    schema   คำอธิบายฐานข้อมูลที่ส่งให้โมเดลผ่าน MCP resource
+             ต้องนับเป็นข้อมูลที่ดึงมาด้วย เพราะโมเดลไม่ได้คิดขึ้นเอง
+             เช่นประโยคว่าข้อมูลมีตั้งแต่ปี 2552 ถึง 2569 เป็นความจริงที่อ่านมาจาก schema
+             ตรวจแล้วว่า schema ไม่มีจำนวนเรื่องร้องเรียนอยู่เลย
+             การนับเข้าไปจึงไม่ทำให้ตัวเลขที่แต่งขึ้นหลุดรอด
+    """
     blob = "\n".join(json.dumps(c, ensure_ascii=False) if isinstance(c, dict) else str(c)
                      for c in context)
-    pool = numbers(blob)
-    claimed = numbers(answer)
+    pool = numbers(blob + "\n" + (schema or ""))
+    claimed = numbers(_strip_list_markers(answer))
     if not claimed:
         return 1.0, []          # ไม่มีตัวเลขให้ผิด
     bad = [n for n in claimed if not _found(n, pool)]

@@ -72,9 +72,9 @@ async def run_real(cases, label):
                 answer = await agent.run_turn(session, client, messages, oa_tools,
                                               case["question"])
                 ctx = list(tracer.context)
-                one = _score_one(case, truth, answer, ctx, tracer)
+                one = _score_one(case, truth, answer, ctx, tracer, system)
             except Exception as e:
-                one = _score_one(case, truth, "", list(tracer.context), tracer)
+                one = _score_one(case, truth, "", list(tracer.context), tracer, system)
                 one["error"] = "%s: %s" % (type(e).__name__, e)
                 print("  %-4s ล้มเหลว %s" % (case["id"], one["error"][:90]))
                 results.append(one)
@@ -85,9 +85,9 @@ async def run_real(cases, label):
     return results
 
 
-def _score_one(case, truth, answer, ctx, tracer=None):
+def _score_one(case, truth, answer, ctx, tracer=None, schema=""):
     c, c_detail = correctness(case, answer, truth)
-    f, unsupported = faithfulness(answer, ctx)
+    f, unsupported = faithfulness(answer, ctx, schema)
     if tracer is not None and tracer.enabled:
         tracer.add_score("correctness", c, json.dumps(c_detail, ensure_ascii=False))
         tracer.add_score("faithfulness", f,

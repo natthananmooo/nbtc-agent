@@ -39,6 +39,12 @@ def _label(step: dict) -> dict:
 
     out = {"tool": step["tool"], "kind": step.get("kind")}
 
+    if isinstance(body, dict) and body.get("ok") is False:
+        out["how"] = "เครื่องมือแจ้งว่าพารามิเตอร์ไม่ถูก"
+        out["error"] = body.get("error")
+        out["how_to_fix"] = body.get("how_to_fix")
+        return out
+
     if step["tool"] == "resolve_filter_values":
         conf = body.get("confidence")
         out["how"] = ("ไฟล์ alias" if body.get("alias_group")

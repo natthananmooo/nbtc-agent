@@ -97,6 +97,14 @@ function stepCard(s, i) {
             : s.confidence === 'ambiguous' ? 'warn' : '';
   let body = '';
 
+  if (s.error) {
+    body += '<div class="warn-box">' + esc(s.error) +
+            (s.how_to_fix ? '<br><br>วิธีแก้: ' + esc(s.how_to_fix) : '') + '</div>';
+    return '<div class="card"><div class="step-head"><span class="num">' + (i + 1) +
+      '</span><span class="tool">' + esc(s.tool) + '</span>' +
+      '<span class="how warn">' + esc(s.how || '') + '</span></div>' + body + '</div>';
+  }
+
   if (s.tool === 'resolve_filter_values') {
     body += '<div class="label">คำที่ผู้ใช้พิมพ์ "' + esc(s.query) + '" ไปตรงกับคอลัมน์ ' +
             esc(s.field || '-') + ' · ความมั่นใจ ' + esc(s.confidence) + '</div>';

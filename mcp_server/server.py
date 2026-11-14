@@ -22,6 +22,22 @@ from tools.resolve import resolve_filter_values as _resolve
 from tools.resolve import values_for_prompt as _values
 from tools import db as _db
 
+# --------------------------------------------------------------- ข้อผิดพลาด
+# MCP ซ่อนรายละเอียด exception ไม่ให้ไปถึง client โมเดลจึงเห็นแค่
+# "Error executing tool ..." ซึ่งแก้ตัวเองไม่ได้
+# จึงดักเองแล้วคืนเป็นผลลัพธ์ธรรมดาที่บอกว่าผิดตรงไหนและต้องทำอย่างไร
+# โมเดลอ่านแล้วเรียกใหม่ให้ถูกได้ในรอบถัดไป
+
+
+def _recoverable(err: Exception, how_to_fix: str, **hints) -> dict:
+    return {
+        "ok": False,
+        "error": str(err) or type(err).__name__,
+        "how_to_fix": how_to_fix,
+        **hints,
+    }
+
+
 mcp = MCPServer(
     "nbtc-complaints",
     instructions="สถิติเรื่องร้องเรียนในกิจการโทรคมนาคม จาก กสทช. "
@@ -31,7 +47,12 @@ mcp = MCPServer(
 
 @mcp.tool()
 def resolve_filter_values(user_phrase: str, field: str | None = None) -> dict:
-    """แปลงคำที่ผู้ใช้พิมพ์ ให้เป็นค่าที่มีอยู่จริงในฐานข้อมูล
+    """แปลงคำที่ผู้ใช้พิมพ์ ให้เป็นค่าที่มีอยู่จริงในฐานข้อมูล สำหรับคอลัมน์ที่เป็นข้อความเท่านั้น
+
+    ห้ามเรียกกับ year หรือ month เพราะเป็นตัวเลข ไม่ใช่ข้อความ
+    ปีและเดือนส่งเข้า filters ของ query_complaints ได้ตรง ๆ เลย
+    เช่น ผู้ใช้ถามถึงปี 2564 ให้ข้ามมาเรียก query_complaints ด้วย
+    filters={"year": [2564]} ทันที ไม่ต้องแปลงอะไรก่อน
 
     เรียกตัวนี้ก่อนเสมอ เมื่อคำถามอ้างถึงผู้ให้บริการ ประเภทบริการ กลุ่มปัญหา
     หรือพื้นที่ เพราะคำที่คนพูดมักไม่ตรงกับค่าที่เก็บจริง เช่น ผู้ใช้พิมพ์ AIS
@@ -47,7 +68,12 @@ def resolve_filter_values(user_phrase: str, field: str | None = None) -> dict:
         field: ระบุคอลัมน์ถ้ารู้แน่ เช่น provider, service_type, problem_group,
                region, province, district, channel, status
     """
-    return _resolve(user_phrase, field)
+    try:
+        return _resolve(user_phrase, field)
+    except Exception as e:
+        return _recoverable(
+            e, "ตรวจชื่อ field ให้ตรงกับรายการที่ให้ไว้ หรือเว้นว่างเพื่อค้นทุกคอลัมน์",
+            valid_fields=list(_db.DIMENSIONS))
 
 
 @mcp.tool()
@@ -82,7 +108,18 @@ def query_complaints(
                   เพราะถ้าไม่ใส่ ระบบจะเรียงตามปีจากเก่าไปใหม่
         limit: จำนวนแถวสูงสุด
     """
-    return _query(metric, group_by, filters, date_from, date_to, order_by, limit)
+    try:
+        return _query(metric, group_by, filters, date_from, date_to, order_by, limit)
+    except _db.SchemaError as e:
+        return _recoverable(
+            e, "เลือกชื่อคอลัมน์หรือ metric จากรายการข้างล่าง แล้วเรียกใหม่",
+            valid_columns=list(_db.DIMENSIONS), valid_metrics=list(_db.MEASURES))
+    except Exception as e:
+        return _recoverable(
+            e, "ตรวจรูปแบบพารามิเตอร์ เช่น group_by ต้องเป็นลิสต์ของชื่อคอลัมน์ "
+               "filters ต้องเป็น dict ชื่อคอลัมน์ไปหาลิสต์ของค่า "
+               "date_from และ date_to ต้องเป็น YYYY-MM-DD โดยปีเป็น พ.ศ.",
+            valid_columns=list(_db.DIMENSIONS), valid_metrics=list(_db.MEASURES))
 
 
 @mcp.tool()
@@ -102,7 +139,13 @@ def analyze_results(
         mode: summary, trend (ใช้กับข้อมูลรายปีรายเดือน), compare หรือ share
         warnings: warnings ที่ query_complaints คืนมา
     """
-    return _analyze(rows, question, mode, warnings)
+    try:
+        return _analyze(rows, question, mode, warnings)
+    except Exception as e:
+        return _recoverable(
+            e, "ส่ง rows ที่ได้จาก query_complaints มาตรง ๆ และ mode ต้องเป็นหนึ่งใน "
+               "summary, trend, compare, share",
+            valid_modes=["summary", "trend", "compare", "share"])
 
 
 @mcp.tool()
@@ -126,7 +169,14 @@ def render_chart(
         title: หัวกราฟ
         filename: ตั้งชื่อไฟล์เองได้ ถ้าไม่ระบุจะตั้งให้
     """
-    return _chart(rows, chart_type, x, y, title, filename)
+    try:
+        return _chart(rows, chart_type, x, y, title, filename)
+    except Exception as e:
+        cols = list(rows[0]) if rows else []
+        return _recoverable(
+            e, "x และ y ต้องเป็นชื่อคอลัมน์ที่มีอยู่จริงใน rows "
+               "และ chart_type ต้องเป็นหนึ่งใน bar, barh, line, pie",
+            columns_in_rows=cols, valid_chart_types=["bar", "barh", "line", "pie"])
 
 
 # ---------------------------------------------------------------- resource

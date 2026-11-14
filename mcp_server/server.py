@@ -11,7 +11,10 @@ mcp_server/server.py - ห่อ Application Tools ทั้ง 4 ตัวใ�
 
 from __future__ import annotations
 
+import json
 import os
+import sys
+import time
 
 from mcp.server.mcpserver import MCPServer
 
@@ -27,6 +30,44 @@ from tools import db as _db
 # "Error executing tool ..." ซึ่งแก้ตัวเองไม่ได้
 # จึงดักเองแล้วคืนเป็นผลลัพธ์ธรรมดาที่บอกว่าผิดตรงไหนและต้องทำอย่างไร
 # โมเดลอ่านแล้วเรียกใหม่ให้ถูกได้ในรอบถัดไป
+
+
+# ------------------------------------------------------------------- log
+# พิมพ์ว่าใครเรียก tool อะไร ด้วยพารามิเตอร์ไหน และได้อะไรกลับ
+# เพื่อให้ docker compose logs -f mcp อ่านแล้วเห็นการทำงานจริง
+LOG = os.environ.get("MCP_LOG", "1") != "0"
+
+
+def _brief(v, limit=90) -> str:
+    t = json.dumps(v, ensure_ascii=False, default=str)
+    return t if len(t) <= limit else t[:limit] + "…"
+
+
+def _log_call(name: str, args: dict, result, started: float):
+    if not LOG:
+        return
+    ms = (time.time() - started) * 1000
+    shown = {k: v for k, v in args.items() if v not in (None, [], {})}
+    line = "[tool] %-22s %s" % (name, _brief(shown, 120))
+
+    if isinstance(result, dict):
+        if result.get("ok") is False:
+            line += "\n        ผิดพลาด  %s" % result.get("error", "")[:110]
+        else:
+            if "sql_used" in result:
+                line += "\n        SQL      %s" % result["sql_used"][:110]
+                line += "\n        ได้      %d แถว" % result.get("row_count", 0)
+            if "confidence" in result:
+                line += "\n        ได้      confidence=%s  %d ตัวเลือก" % (
+                    result["confidence"], len(result.get("candidates", [])))
+            if "findings" in result:
+                line += "\n        ได้      %d ข้อสรุป" % len(result["findings"])
+            if "image_path" in result:
+                line += "\n        ได้      %s" % result.get("image_path")
+            for w in (result.get("warnings") or [])[:3]:
+                line += "\n        เตือน    %s" % w[:110]
+
+    print("%s  %.0f ms" % (line, ms), file=sys.stderr, flush=True)
 
 
 def _recoverable(err: Exception, how_to_fix: str, **hints) -> dict:
@@ -68,12 +109,16 @@ def resolve_filter_values(user_phrase: str, field: str | None = None) -> dict:
         field: ระบุคอลัมน์ถ้ารู้แน่ เช่น provider, service_type, problem_group,
                region, province, district, channel, status
     """
+    t0 = time.time()
     try:
-        return _resolve(user_phrase, field)
+        out = _resolve(user_phrase, field)
     except Exception as e:
-        return _recoverable(
+        out = _recoverable(
             e, "ตรวจชื่อ field ให้ตรงกับรายการที่ให้ไว้ หรือเว้นว่างเพื่อค้นทุกคอลัมน์",
             valid_fields=list(_db.DIMENSIONS))
+    _log_call("resolve_filter_values",
+              {"user_phrase": user_phrase, "field": field}, out, t0)
+    return out
 
 
 @mcp.tool()
@@ -108,18 +153,24 @@ def query_complaints(
                   เพราะถ้าไม่ใส่ ระบบจะเรียงตามปีจากเก่าไปใหม่
         limit: จำนวนแถวสูงสุด
     """
+    t0 = time.time()
     try:
-        return _query(metric, group_by, filters, date_from, date_to, order_by, limit)
+        out = _query(metric, group_by, filters, date_from, date_to, order_by, limit)
     except _db.SchemaError as e:
-        return _recoverable(
+        out = _recoverable(
             e, "เลือกชื่อคอลัมน์หรือ metric จากรายการข้างล่าง แล้วเรียกใหม่",
             valid_columns=list(_db.DIMENSIONS), valid_metrics=list(_db.MEASURES))
     except Exception as e:
-        return _recoverable(
+        out = _recoverable(
             e, "ตรวจรูปแบบพารามิเตอร์ เช่น group_by ต้องเป็นลิสต์ของชื่อคอลัมน์ "
                "filters ต้องเป็น dict ชื่อคอลัมน์ไปหาลิสต์ของค่า "
                "date_from และ date_to ต้องเป็น YYYY-MM-DD โดยปีเป็น พ.ศ.",
             valid_columns=list(_db.DIMENSIONS), valid_metrics=list(_db.MEASURES))
+    _log_call("query_complaints",
+              {"metric": metric, "group_by": group_by, "filters": filters,
+               "date_from": date_from, "date_to": date_to,
+               "order_by": order_by, "limit": limit}, out, t0)
+    return out
 
 
 @mcp.tool()
@@ -139,13 +190,16 @@ def analyze_results(
         mode: summary, trend (ใช้กับข้อมูลรายปีรายเดือน), compare หรือ share
         warnings: warnings ที่ query_complaints คืนมา
     """
+    t0 = time.time()
     try:
-        return _analyze(rows, question, mode, warnings)
+        out = _analyze(rows, question, mode, warnings)
     except Exception as e:
-        return _recoverable(
+        out = _recoverable(
             e, "ส่ง rows ที่ได้จาก query_complaints มาตรง ๆ และ mode ต้องเป็นหนึ่งใน "
                "summary, trend, compare, share",
             valid_modes=["summary", "trend", "compare", "share"])
+    _log_call("analyze_results", {"mode": mode, "rows": len(rows or [])}, out, t0)
+    return out
 
 
 @mcp.tool()
@@ -169,14 +223,18 @@ def render_chart(
         title: หัวกราฟ
         filename: ตั้งชื่อไฟล์เองได้ ถ้าไม่ระบุจะตั้งให้
     """
+    t0 = time.time()
     try:
-        return _chart(rows, chart_type, x, y, title, filename)
+        out = _chart(rows, chart_type, x, y, title, filename)
     except Exception as e:
         cols = list(rows[0]) if rows else []
-        return _recoverable(
+        out = _recoverable(
             e, "x และ y ต้องเป็นชื่อคอลัมน์ที่มีอยู่จริงใน rows "
                "และ chart_type ต้องเป็นหนึ่งใน bar, barh, line, pie",
             columns_in_rows=cols, valid_chart_types=["bar", "barh", "line", "pie"])
+    _log_call("render_chart",
+              {"chart_type": chart_type, "x": x, "y": y, "rows": len(rows or [])}, out, t0)
+    return out
 
 
 # ---------------------------------------------------------------- resource

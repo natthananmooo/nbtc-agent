@@ -1,0 +1,175 @@
+"""
+tools/resolve.py - แปลงคำที่ผู้ใช้พิมพ์ ให้เป็นค่าที่มีอยู่จริงในฐานข้อมูล
+
+ทำไมต้องมี tool ตัวนี้
+    ผู้ใช้พิมพ์ "AIS" แต่ในฐานข้อมูลไม่มีคำว่า AIS อยู่เลย
+    มีแต่ "บริษัท แอดวานซ์ ไวร์เลส เน็ทเวอร์ค จำกัด"
+    ถ้า agent เดาเอง SQL จะถูก syntax แต่ได้คำตอบผิด ซึ่งจับยากมาก
+
+ค่าที่คืนกลับมีฟิลด์ confidence สามค่า
+    high       ชัดเจน ใช้ได้เลย
+    ambiguous  ตรงได้หลายทาง agent ต้องถามกลับ ไม่ใช่เดา
+    none       ไม่มีค่านี้ในฐานข้อมูล agent ต้องบอกตรง ๆ
+"""
+
+from __future__ import annotations
+
+import re
+from difflib import SequenceMatcher
+from functools import lru_cache
+from pathlib import Path
+
+import yaml
+
+from . import db
+
+ALIAS_FILE = Path(__file__).resolve().parent.parent / "aliases.yaml"
+
+# คอลัมน์ที่ค้นด้วยข้อความได้ (year กับ month เป็นตัวเลข ไม่ต้องแปลง)
+SEARCHABLE = (
+    "provider", "service_type", "problem_group", "problem_detail",
+    "region", "province", "district", "channel", "status",
+    "cat_level1", "cat_level2",
+)
+
+MAX_CANDIDATES = 5
+
+# เกณฑ์คะแนน แยกสองระดับเพราะหลักฐานไม่เท่ากัน
+#   substring  คำที่พิมพ์โผล่อยู่ในค่าจริง เป็นหลักฐานตรง เชื่อได้
+#   fuzzy      คะแนนความคล้ายตัวอักษร ภาษาไทยให้ค่าหลอกได้ง่าย ต้องตั้งสูง
+MIN_FUZZY = 0.78
+MIN_SUBSTRING = 0.70
+
+
+def _norm(s: str) -> str:
+    return re.sub(r"\s+", " ", str(s).strip().lower())
+
+
+@lru_cache(maxsize=1)
+def _aliases() -> dict[str, dict[str, list[str]]]:
+    """อ่าน brand_aliases.yaml ไฟล์ที่คนเขียน ไม่ใช่ AI เดา"""
+    if not ALIAS_FILE.exists():
+        return {}
+    data = yaml.safe_load(ALIAS_FILE.read_text(encoding="utf-8")) or {}
+    return {f: {_norm(k): v for k, v in groups.items()}
+            for f, groups in data.items() if groups}
+
+
+@lru_cache(maxsize=32)
+def _values(field: str) -> tuple[tuple[str, int], ...]:
+    return tuple(db.distinct_values(field))
+
+
+def _similarity(phrase: str, value: str) -> tuple[float, str]:
+    """
+    คืน (คะแนน, ชนิดหลักฐาน) ชนิดเป็น exact, substring หรือ fuzzy
+    ไม่ใช้ embedding ตามขอบเขต MVP แต่เปลี่ยนมาใช้ได้ภายหลังโดยไม่แตะที่อื่น
+    """
+    p, v = _norm(phrase), _norm(value)
+    if p == v:
+        return 1.0, "exact"
+    if p in v:
+        # คำที่พิมพ์โผล่อยู่ในค่าจริง ยิ่งกินสัดส่วนมากยิ่งมั่นใจ
+        return 0.70 + 0.25 * (len(p) / len(v)), "substring"
+    if v in p:
+        return 0.70 + 0.20 * (len(v) / len(p)), "substring"
+    return SequenceMatcher(None, p, v).ratio(), "fuzzy"
+
+
+def resolve_filter_values(user_phrase: str, field: str | None = None) -> dict:
+    """
+    แปลงคำผู้ใช้เป็นค่าในฐานข้อมูล
+
+    user_phrase : คำที่ผู้ใช้พิมพ์ เช่น "AIS" "เน็ตช้า" "ภาคเหนือ"
+    field       : ระบุคอลัมน์ หรือเว้นไว้ให้ค้นทุกคอลัมน์
+    """
+    phrase = _norm(user_phrase)
+    fields = [db.check_dimension(field)] if field else list(SEARCHABLE)
+
+    # --- 1. ดูไฟล์ alias ที่คนเขียนไว้ก่อน ---
+    for f in fields:
+        group = _aliases().get(f, {}).get(phrase)
+        if group:
+            counts = dict(_values(f))
+            members = [{"value": v, "score": 1.0, "rows": counts.get(v, 0)}
+                       for v in group if v in counts]
+            return {
+                "query": user_phrase,
+                "field": f,
+                "candidates": members,
+                "confidence": "high",
+                "alias_group": user_phrase,
+                "note": "มาจาก aliases.yaml รวม %d รายการ %d เรื่อง "
+                        "ต้องแจ้งผู้ใช้ว่ารวมอะไรเข้าด้วยกันบ้าง"
+                        % (len(members), sum(m["rows"] for m in members)),
+            }
+
+    # --- 2. ค้นจากค่าจริงในฐานข้อมูล ---
+    scored = []
+    for f in fields:
+        for value, rows in _values(f):
+            s, kind = _similarity(phrase, value)
+            floor = MIN_FUZZY if kind == "fuzzy" else MIN_SUBSTRING
+            if s >= floor:
+                scored.append((s, f, value, rows))
+    scored.sort(key=lambda t: (-t[0], -t[3]))
+
+    if not scored:
+        return {
+            "query": user_phrase,
+            "field": field,
+            "candidates": [],
+            "confidence": "none",
+            "alias_group": None,
+            "note": "ไม่มีค่าไหนตรงพอ อย่าเดาเด็ดขาด ให้ถามผู้ใช้โดยเสนอค่าที่มีจริง "
+                        "จากรายการใน system prompt หรือบอกว่าไม่มีข้อมูลนี้",
+        }
+
+    top_field = scored[0][1]
+    same = [t for t in scored if t[1] == top_field][:MAX_CANDIDATES]
+    cands = [{"value": v, "score": round(s, 3), "rows": n} for s, _, v, n in same]
+
+    # --- 3. ตัดสิน confidence ---
+    if cands[0]["score"] >= 0.85 and (
+        len(cands) == 1 or cands[0]["score"] - cands[1]["score"] >= 0.15
+    ):
+        conf, note = "high", "ตรงชัดเจน ใช้ค่านี้ได้ และบอกผู้ใช้ว่าใช้ค่าอะไร"
+    else:
+        conf, note = "ambiguous", (
+            "ตรงได้หลายค่า ต้องถามผู้ใช้ว่าหมายถึงอันไหน "
+            "พร้อมบอกจำนวนเรื่องของแต่ละตัวเลือก ห้ามเดา")
+
+    return {
+        "query": user_phrase,
+        "field": top_field,
+        "candidates": cands,
+        "confidence": conf,
+        "alias_group": None,
+        "note": note,
+    }
+
+
+def values_for_prompt(fields: tuple = SEARCHABLE, limit: int = 120) -> str:
+    """
+    รายการค่าไม่ซ้ำ สำหรับใส่ใน system prompt ตามขอบเขต MVP
+    (district มี 861 ค่า จึงตัดออก ให้ใช้ resolve_filter_values แทน)
+    """
+    out = []
+    for f in fields:
+        vals = _values(f)
+        if len(vals) > limit:
+            out.append("%s: มี %d ค่า มากเกินกว่าจะใส่ทั้งหมด ให้เรียก resolve_filter_values"
+                       % (f, len(vals)))
+            continue
+        out.append("%s (%d): %s" % (f, len(vals), " | ".join(v for v, _ in vals)))
+    return "\n".join(out)
+
+
+if __name__ == "__main__":
+    for q in ["AIS", "ทรู", "เน็ตช้า", "ภาคเหนือ", "มือถือ", "เชียงใหม่", "ดาวอังคาร"]:
+        r = resolve_filter_values(q)
+        print("\n%-10s -> %-14s %s" % (q, r["field"], r["confidence"]))
+        if r["alias_group"]:
+            print("            alias:", r["note"].split(" ต้อง")[0])
+        for c in r["candidates"][:4]:
+            print("            %.2f  %6d  %s" % (c["score"], c["rows"], c["value"]))

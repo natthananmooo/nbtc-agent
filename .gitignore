@@ -1,0 +1,24 @@
+# ความลับ ห้ามขึ้น git เด็ดขาด
+.env
+*.key
+
+# ไฟล์ข้อมูลขนาดใหญ่ สร้างใหม่ได้จาก 01_fetch_explore.py และ 02_build_db.py
+data/*.db
+data/*.db-journal
+data/*.csv
+data/*.json
+
+# ผลลัพธ์ระหว่างรัน
+charts/
+*.png
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# macOS
+.DS_Store

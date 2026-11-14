@@ -87,14 +87,17 @@ def resolve_filter_values(user_phrase: str, field: str | None = None) -> dict:
 
     # year กับ month เป็นตัวเลข ไม่ต้องแปลงอะไร ส่งเข้า filters ได้เลย
     if field in ("year", "month"):
+        # ไม่ใช่ "ไม่พบ" แต่เป็น "ไม่ต้องแปลง" คนละความหมายกัน
+        # แถมค่าที่พร้อมใช้ไปเลย โมเดลจะได้ไม่ต้องเรียกซ้ำ
+        digits = re.sub(r"[^\d]", "", str(user_phrase))
+        ready = {field: [int(digits)]} if digits else None
         return {
             "query": user_phrase, "field": field, "candidates": [],
-            "use_in_filters": None,
-            "confidence": "none", "alias_group": None,
-            "note": "คอลัมน์ %s เป็นตัวเลข ไม่ต้องใช้ tool นี้ "
+            "use_in_filters": ready,
+            "confidence": "not_needed", "alias_group": None,
+            "note": "คอลัมน์ %s เป็นตัวเลข ไม่ต้องแปลงอะไร "
                     "ใส่ใน filters ของ query_complaints ได้เลย "
-                    "ฐานข้อมูลเก็บปีเป็น พ.ศ. ตามต้นฉบับ ใส่ พ.ศ. ได้เลย"
-                    % field,
+                    "ฐานข้อมูลเก็บปีเป็น พ.ศ. ตามต้นฉบับ" % field,
         }
 
     fields = [db.check_dimension(field)] if field else list(SEARCHABLE)

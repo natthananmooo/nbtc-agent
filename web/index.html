@@ -109,6 +109,7 @@ function stepCard(s, i) {
     body += '<div class="label">คำที่ผู้ใช้พิมพ์ "' + esc(s.query) + '" ไปตรงกับคอลัมน์ ' +
             esc(s.field || '-') + ' · ความมั่นใจ ' + esc(s.confidence) + '</div>';
     if (s.candidates && s.candidates.length) body += rowsTable(s.candidates);
+    else if (s.note) body += '<div class="label">' + esc(s.note) + '</div>';
   } else if (s.tool === 'query_complaints') {
     if (s.sql) body += '<pre>' + esc(s.sql) +
       (s.params && s.params.length ? '\n\nparams: ' + esc(JSON.stringify(s.params)) : '') + '</pre>';

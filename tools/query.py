@@ -114,10 +114,20 @@ def query_complaints(
     # order_by รับได้สองแบบ
     #   ชื่อคอลัมน์ -> เรียงจากน้อยไปมาก (เช่น เรียงตามปี)
     #   ชื่อ metric -> เรียงจากมากไปน้อย (เช่น หา "อันดับหนึ่ง")
+    # โมเดลมักส่งมาแบบ "count desc" หรือ "year ASC" ซึ่งเป็นภาษา SQL
+    # รับไว้แล้วแยกทิศทางออกมาเอง ดีกว่าปฏิเสธแล้วให้เสียรอบ
+    direction = ""
+    if order_by:
+        parts = str(order_by).strip().split()
+        order_by = parts[0]
+        if len(parts) > 1 and parts[1].upper() in ("ASC", "DESC"):
+            direction = parts[1].upper()
+
     if order_by in ("count", "n", "share_pct", "avg_days_to_close"):
-        ob = ("count" if order_by == "share_pct" else order_by) + " DESC"
+        col = "count" if order_by == "share_pct" else order_by
+        ob = col + " " + (direction or "DESC")
     elif order_by:
-        ob = db.check_dimension(order_by) + " ASC"
+        ob = db.check_dimension(order_by) + " " + (direction or "ASC")
     elif groups and groups[0] in ("year", "month"):
         ob = ", ".join(groups) + " ASC"     # ข้อมูลตามเวลา เรียงเก่าไปใหม่
     else:

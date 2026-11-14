@@ -23,6 +23,7 @@ import asyncio
 import json
 import os
 import sys
+import time
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
@@ -196,6 +197,34 @@ async def build_context(session) -> tuple[str, list[dict]]:
     return SYSTEM_PROMPT.replace("{schema}", schema), mcp_tools_to_openai(tools)
 
 
+LLM_RETRIES = int(os.environ.get("LLM_RETRIES", "3"))
+
+
+def _complete(client, messages: list[dict], oa_tools: list[dict]):
+    """เรียกโมเดล และลองใหม่เมื่อ provider ส่งของไม่ครบ
+
+    OpenRouter บางครั้งคืน response ที่ไม่มี choices เลย เช่นตอนติด rate limit
+    หรือผู้ให้บริการปลายทางล่มชั่วคราว ถ้าไม่ดักไว้จะพังทั้งรอบ
+    ซึ่งแพงมากตอนรัน eval เพราะคำถามที่รันไปแล้วหายหมด
+    """
+    last = ""
+    for attempt in range(LLM_RETRIES):
+        resp = client.chat.completions.create(
+            model=MODEL, messages=messages, tools=oa_tools, tool_choice="auto")
+        if getattr(resp, "choices", None):
+            return resp
+        # ดึงข้อความจริงจาก provider มาให้อ่านออก ไม่ใช่ NoneType is not subscriptable
+        err = getattr(resp, "error", None) or {}
+        if not isinstance(err, dict):
+            err = {"message": str(err)}
+        last = err.get("message") or str(getattr(resp, "model_dump", lambda: resp)())[:300]
+        wait = 2 ** attempt
+        print("[โมเดลไม่ส่งคำตอบกลับมา รอ %ds แล้วลองใหม่ ครั้งที่ %d: %s]"
+              % (wait, attempt + 1, last[:160]), file=sys.stderr, flush=True)
+        time.sleep(wait)
+    raise RuntimeError("โมเดลไม่ส่งคำตอบกลับมาหลังลอง %d ครั้ง: %s" % (LLM_RETRIES, last))
+
+
 async def run_turn(session, client, messages: list[dict], oa_tools: list[dict],
                    question: str) -> str:
     """วนรอบจนกว่าโมเดลจะตอบเป็นข้อความ แทนที่จะขอเรียก tool เพิ่ม"""
@@ -205,8 +234,7 @@ async def run_turn(session, client, messages: list[dict], oa_tools: list[dict],
         for _ in range(MAX_STEPS):
             visible = [m for m in messages if m.get("role") != "system"][-8:]
             with tracer.generation(MODEL, visible) as gen:
-                resp = client.chat.completions.create(
-                    model=MODEL, messages=messages, tools=oa_tools, tool_choice="auto")
+                resp = _complete(client, messages, oa_tools)
                 msg = resp.choices[0].message
                 usage = getattr(resp, "usage", None)
                 gen.done(

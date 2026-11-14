@@ -66,12 +66,22 @@ async def run_real(cases, label):
             truth = ground_truth(case)
             messages = [{"role": "system", "content": system},
                         {"role": "user", "content": case["question"]}]
-            answer = await agent.run_turn(session, client, messages, oa_tools,
-                                          case["question"])
-            ctx = list(tracer.context)
-            results.append(_score_one(case, truth, answer, ctx, tracer))
+            # คำถามเดียวพังต้องไม่ทำให้ทั้งรอบหาย ไม่งั้นต้องรันใหม่หมด
+            # ข้อที่พังนับเป็นศูนย์ทั้งสองแกน ซึ่งตรงความจริง คือระบบตอบไม่ได้
+            try:
+                answer = await agent.run_turn(session, client, messages, oa_tools,
+                                              case["question"])
+                ctx = list(tracer.context)
+                one = _score_one(case, truth, answer, ctx, tracer)
+            except Exception as e:
+                one = _score_one(case, truth, "", list(tracer.context), tracer)
+                one["error"] = "%s: %s" % (type(e).__name__, e)
+                print("  %-4s ล้มเหลว %s" % (case["id"], one["error"][:90]))
+                results.append(one)
+                continue
+            results.append(one)
             print("  %-4s C=%.2f F=%.2f" % (case["id"],
-                  results[-1]["correctness"], results[-1]["faithfulness"]))
+                  one["correctness"], one["faithfulness"]))
     return results
 
 

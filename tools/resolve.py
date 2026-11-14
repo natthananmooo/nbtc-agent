@@ -33,6 +33,7 @@ SEARCHABLE = (
 )
 
 MAX_CANDIDATES = 5
+MAX_MENU = 30   # จำนวนค่าสูงสุดที่ส่งกลับเป็นเมนูให้ผู้ใช้เลือก
 
 # เกณฑ์คะแนน แยกสองระดับเพราะหลักฐานไม่เท่ากัน
 #   substring  คำที่พิมพ์โผล่อยู่ในค่าจริง เป็นหลักฐานตรง เชื่อได้
@@ -136,6 +137,16 @@ def resolve_filter_values(user_phrase: str, field: str | None = None) -> dict:
     scored.sort(key=lambda t: (-t[0], -t[3]))
 
     if not scored:
+        # ไม่เจอค่าที่ตรง แต่ต้องช่วยให้ถามกลับได้อย่างมีข้อมูล
+        # ส่งเมนูค่าจริงของคอลัมน์นั้นกลับไปพร้อมจำนวนเรื่อง
+        # กันไม่ให้โมเดลไปงมค่าจาก prompt แล้วหยิบข้ามคอลัมน์มา
+        menu, menu_note = [], ""
+        if field:
+            vals = _values(field)
+            menu = [{"value": v, "rows_all_years": n} for v, n in vals[:MAX_MENU]]
+            if len(vals) > MAX_MENU:
+                menu_note = " คอลัมน์นี้มี %d ค่า แสดงแค่ %d ค่าที่พบบ่อยที่สุด" % (
+                    len(vals), MAX_MENU)
         return {
             "query": user_phrase,
             "field": field,
@@ -143,8 +154,14 @@ def resolve_filter_values(user_phrase: str, field: str | None = None) -> dict:
             "use_in_filters": None,
             "confidence": "none",
             "alias_group": None,
-            "note": "ไม่มีค่าไหนตรงพอ อย่าเดาเด็ดขาด ให้ถามผู้ใช้โดยเสนอค่าที่มีจริง "
-                        "จากรายการใน system prompt หรือบอกว่าไม่มีข้อมูลนี้",
+            "field_values": menu,
+            "note": ("ไม่มีค่าไหนในคอลัมน์ %s ที่ตรงกับคำนี้ ห้ามเดาเด็ดขาด "
+                     "ให้ถามผู้ใช้โดยเสนอเฉพาะค่าจาก field_values ข้างล่างนี้เท่านั้น "
+                     "พร้อมบอกจำนวนเรื่องของแต่ละตัว ห้ามเสนอค่าจากคอลัมน์อื่น%s"
+                     % (field or "ใดเลย", menu_note)) if field else
+                    ("ไม่มีค่าไหนตรงพอในทุกคอลัมน์ ห้ามเดา "
+                     "ให้ถามผู้ใช้ว่าหมายถึงอะไร หรือระบุคอลัมน์มาแล้วเรียกใหม่ "
+                     "เพื่อให้ได้รายการค่าที่มีจริงไปเสนอ"),
         }
 
     top_field = scored[0][1]

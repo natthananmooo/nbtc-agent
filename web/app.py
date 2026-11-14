@@ -58,6 +58,7 @@ def _label(step: dict) -> dict:
         out["field"] = body.get("field")
         out["query"] = body.get("query")
         out["candidates"] = body.get("candidates", [])[:6]
+        out["field_values"] = body.get("field_values", [])[:8]
 
     elif step["tool"] == "query_complaints":
         out["how"] = "SQL บนฐานข้อมูลอ่านอย่างเดียว"

@@ -456,9 +456,9 @@ def schema_values() -> str:
 
 if __name__ == "__main__":
     # พิมพ์โหมดไว้ใน log ตั้งแต่ตอนเริ่ม จะได้ไม่วัดผลสลับกันโดยไม่รู้ตัว
-    print("[start] RAG_MODE=%s  EMBED_MODEL=%s" % (
+    print("[start] RAG_MODE=%s  RERANK_MODEL=%s" % (
         os.environ.get("RAG_MODE", "off"),
-        os.environ.get("EMBED_MODEL", "intfloat/multilingual-e5-small")),
+        os.environ.get("RERANK_MODEL", "BAAI/bge-reranker-v2-m3")),
         file=sys.stderr, flush=True)
     transport = os.environ.get("MCP_TRANSPORT", "streamable-http")
     if transport == "stdio":

@@ -20,6 +20,7 @@ from mcp.server.mcpserver import MCPServer
 
 from tools.analyze import analyze_results as _analyze
 from tools.chart import render_chart as _chart
+from tools.dashboard import generate_dashboard as _dashboard
 from tools.query import query_complaints as _query
 from tools.resolve import resolve_filter_values as _resolve
 from tools.resolve import values_for_prompt as _values
@@ -64,6 +65,9 @@ def _log_call(name: str, args: dict, result, started: float):
                 line += "\n        ได้      %d ข้อสรุป" % len(result["findings"])
             if "image_path" in result:
                 line += "\n        ได้      %s" % result.get("image_path")
+            if "html_path" in result:
+                line += "\n        ได้      %s (%d แผง)" % (
+                    result.get("html_path"), result.get("panels_drawn", 0))
             for w in (result.get("warnings") or [])[:3]:
                 line += "\n        เตือน    %s" % w[:110]
 
@@ -212,7 +216,8 @@ def query_complaints(
             valid_columns=list(_db.DIMENSIONS), valid_metrics=list(_db.MEASURES))
     if isinstance(out, dict) and out.get("ok") is not False:
         out["result_id"] = _remember({"rows": out.get("rows", []),
-                                      "warnings": out.get("warnings", [])})
+                                      "warnings": out.get("warnings", []),
+                                      "sql": out.get("sql_used", "")})
     _log_call("query_complaints",
               {"metric": metric, "group_by": group_by, "filters": filters,
                "date_from": date_from, "date_to": date_to,
@@ -297,6 +302,65 @@ def render_chart(
                 valid_chart_types=["bar", "barh", "line", "pie"])
     _log_call("render_chart",
               {"result_id": result_id, "chart_type": chart_type, "x": x, "y": y}, out, t0)
+    return out
+
+
+@mcp.tool()
+def generate_dashboard(
+    title: str,
+    panels: list[dict],
+    notes: list[str] | None = None,
+) -> dict:
+    """รวมหลายกราฟเป็นหน้าสรุปเดียว ได้ไฟล์ HTML ที่ฝังรูปไว้ในตัว
+
+    เรียกเมื่อผู้ใช้ขอภาพรวม หน้าสรุป หรือ dashboard ที่มีหลายมุมมอง
+    ถ้าผู้ใช้ขอกราฟอันเดียว ใช้ render_chart พอ
+
+    ต้องเรียก query_complaints ให้ครบทุกมุมมองก่อน แล้วเอา result_id มาใส่
+    SQL ของแต่ละแผงจะถูกแสดงใต้กราฟอัตโนมัติ ผู้อ่านตรวจที่มาได้
+
+    Args:
+        title: หัวข้อหน้าสรุป
+        panels: รายการแผง แต่ละแผงเป็น object ที่มี
+                result_id ที่ได้จาก query_complaints
+                chart_type เป็น bar, barh, line หรือ pie
+                x ชื่อคอลัมน์หมวดหมู่ เช่น year หรือ province
+                y ชื่อคอลัมน์ตัวเลข เช่น count
+                title หัวข้อของแผงนั้น
+        notes: ข้อความสรุปสั้น ๆ ใต้หัวข้อ
+    """
+    t0 = time.time()
+    built, bad = [], []
+    for i, p in enumerate(panels or [], 1):
+        rid = p.get("result_id")
+        got = _RESULTS.get(rid) if rid else None
+        if got is None:
+            bad.append("แผงที่ %d อ้าง result_id %r ซึ่งไม่มีอยู่" % (i, rid))
+            continue
+        built.append({"rows": got["rows"], "sql": got.get("sql", ""),
+                      "warnings": got.get("warnings", []),
+                      "chart_type": p.get("chart_type", "bar"),
+                      "x": p.get("x"), "y": p.get("y"),
+                      "title": p.get("title", "แผงที่ %d" % i)})
+
+    if not built:
+        out = {"ok": False,
+               "error": "ไม่มีแผงไหนใช้ได้ " + " ".join(bad),
+               "how_to_fix": "เรียก query_complaints ให้ครบทุกมุมมองก่อน "
+                             "แล้วเอา result_id ที่ได้มาใส่ในแต่ละแผง",
+               "available_result_ids": list(_RESULT_ORDER)}
+    else:
+        try:
+            out = _dashboard(title, built, notes)
+            if bad:
+                out.setdefault("warnings", []).extend(bad)
+        except Exception as e:
+            out = _recoverable(
+                e, "x และ y ต้องเป็นชื่อคอลัมน์ที่มีอยู่จริงในผลลัพธ์ "
+                   "และ chart_type ต้องเป็นหนึ่งใน bar, barh, line, pie",
+                valid_chart_types=["bar", "barh", "line", "pie"])
+    _log_call("generate_dashboard",
+              {"title": title, "panels": len(panels or [])}, out, t0)
     return out
 
 

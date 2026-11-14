@@ -90,6 +90,13 @@ def _label(step: dict) -> dict:
         out["image_url"] = ("/charts/" + Path(path).name) if path else None
         out["warnings"] = body.get("warnings", [])
 
+    elif step["tool"] == "generate_dashboard":
+        out["how"] = "รวมหลายกราฟเป็นหน้าสรุป"
+        hp = body.get("html_path")
+        out["html_url"] = ("/charts/" + Path(hp).name) if hp else None
+        out["panels_drawn"] = body.get("panels_drawn", 0)
+        out["warnings"] = body.get("warnings", [])
+
     return out
 
 

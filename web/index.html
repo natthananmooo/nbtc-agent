@@ -70,7 +70,8 @@ const SAMPLES = [
   "AIS ถูกร้องเรียนกี่เรื่อง",
   "เน็ตช้ามีคนร้องเรียนเยอะไหม",
   "สัดส่วนเรื่องร้องเรียนแยกตามประเภทบริการ",
-  "ร้องเรียนเรื่องดาวเทียมมีกี่เรื่อง"
+  "ร้องเรียนเรื่องดาวเทียมมีกี่เรื่อง",
+  "ขอหน้าสรุปภาพรวม แนวโน้มรายปี สัดส่วนประเภทบริการ และจังหวัดที่ร้องเรียนมากสุด"
 ];
 const chips = document.getElementById('chips');
 SAMPLES.forEach(s => {
@@ -122,6 +123,15 @@ function stepCard(s, i) {
     if (s.findings && s.findings.length)
       body += '<ul>' + s.findings.map(f => '<li>' + esc(f) + '</li>').join('') + '</ul>';
     (s.caveats || []).forEach(w => body += '<div class="warn-box">' + esc(w) + '</div>');
+  } else if (s.tool === 'generate_dashboard') {
+    if (s.html_url) {
+      body += '<div class="label">หน้าสรุป ' + esc(s.panels_drawn) + ' แผง</div>' +
+        '<iframe src="' + esc(s.html_url) + '" style="width:100%;height:520px;' +
+        'border:1px solid var(--line);border-radius:8px;margin-top:8px"></iframe>' +
+        '<div style="margin-top:8px"><a href="' + esc(s.html_url) + '" target="_blank">' +
+        'เปิดเต็มหน้าจอ</a></div>';
+    }
+    (s.warnings || []).forEach(w => body += '<div class="warn-box">' + esc(w) + '</div>');
   } else if (s.tool === 'render_chart') {
     if (s.image_url) {
       body += '<img src="' + esc(s.image_url) + '" alt="กราฟ" ' +

@@ -14,20 +14,20 @@ from __future__ import annotations
 
 from . import db
 
-MIN_DAYS = 0          # days_to_close ติดลบ 104 แถว ตัดออกตอนคำนวณค่าเฉลี่ย
+MIN_DAYS = 0          # days_to_close ติดลบ ตัดออกตอนคำนวณค่าเฉลี่ย
 NULL_WARN_AT = 0.05   # คอลัมน์ที่ใช้กรองแล้วว่างเกินนี้ ต้องเตือน
 
 
-def _to_ce(year):
+def _to_be(year):
     """
-    ฐานข้อมูลเก็บปีเป็น ค.ศ. แต่คนไทยพิมพ์ พ.ศ.
-    ปีที่มากกว่า 2400 ถือว่าเป็น พ.ศ. แน่นอน เพราะชุดข้อมูลนี้เริ่มปี ค.ศ. 2009
+    ฐานข้อมูลเก็บปีเป็น พ.ศ. ตามที่ กสทช. เผยแพร่ (2552 ถึง 2569)
+    ถ้าผู้ใช้ส่ง ค.ศ. มา (น้อยกว่า 2400) แปลงขึ้นเป็น พ.ศ. ให้
     """
     try:
         y = int(year)
     except (TypeError, ValueError):
         return year, False
-    return (y - 543, True) if y > 2400 else (y, False)
+    return (y + 543, True) if y < 2400 else (y, False)
 
 
 def _filter_clauses(filters, date_from, date_to, warnings=None):
@@ -40,10 +40,10 @@ def _filter_clauses(filters, date_from, date_to, warnings=None):
         if not vals:
             continue
         if c == "year":
-            converted = [_to_ce(v) for v in vals]
+            converted = [_to_be(v) for v in vals]
             if any(flag for _, flag in converted) and warnings is not None:
                 warnings.append(
-                    "แปลงปี %s จาก พ.ศ. เป็น ค.ศ. %s ก่อนค้น ต้องบอกผู้ใช้ด้วย"
+                    "ผู้ใช้ระบุปีเป็น ค.ศ. %s ฐานข้อมูลเก็บเป็น พ.ศ. จึงค้นด้วย %s"
                     % (vals, [y for y, _ in converted]))
             vals = [y for y, _ in converted]
         clauses.append("%s IN (%s)" % (c, ",".join("?" * len(vals))))

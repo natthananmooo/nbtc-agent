@@ -92,7 +92,7 @@ def resolve_filter_values(user_phrase: str, field: str | None = None) -> dict:
             "confidence": "none", "alias_group": None,
             "note": "คอลัมน์ %s เป็นตัวเลข ไม่ต้องใช้ tool นี้ "
                     "ใส่ใน filters ของ query_complaints ได้เลย "
-                    "ฐานข้อมูลเก็บปีเป็น ค.ศ. แต่ query_complaints แปลง พ.ศ. ให้อัตโนมัติ"
+                    "ฐานข้อมูลเก็บปีเป็น พ.ศ. ตามต้นฉบับ ใส่ พ.ศ. ได้เลย"
                     % field,
         }
 

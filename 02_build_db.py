@@ -4,7 +4,9 @@
 หลักการ: ไม่แก้ไขข้อมูลต้นฉบับ
   - raw_complaints.json  ไม่ถูกแตะ
   - คอลัมน์ทุกตัวคัดลอกค่าจากต้นฉบับตรง ๆ
-  - แปลงเฉพาะรูปแบบที่ SQL ใช้ไม่ได้ (วันที่ พ.ศ. -> ISO) และตัดช่องว่างหัวท้าย
+  - ปีเก็บเป็น พ.ศ. เหมือนที่ กสทช. เผยแพร่ ไม่แปลงเป็น ค.ศ.
+  - วันที่จัดรูปใหม่เป็น ปปปป-ดด-วว เพื่อให้ SQL เรียงและเทียบได้ แต่ปียังเป็น พ.ศ.
+  - เก็บสตริงวันที่ต้นฉบับไว้ด้วยใน received_date_raw และ closed_date_raw
   - ไม่จัดกลุ่ม ไม่ตีความ ไม่เพิ่มคอลัมน์ที่เป็นการตัดสินใจแทนผู้ใช้
 
 รัน:
@@ -16,8 +18,10 @@
 
 import json
 import re
+import shutil
 import sqlite3
 import stat
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -29,8 +33,9 @@ DB = DATA_DIR / "complaints.db"
 TABLE = "complaints"
 
 # ----------------------------------------------------------------------------
-# วันที่ไทย (พ.ศ. + เดือนย่อ) -> ISO
-# เหตุผลที่ต้องแปลง: SQL คำนวณวันที่จาก "05-ม.ค.-2552" ไม่ได้
+# วันที่ไทย "05-ม.ค.-2552" -> "2552-01-05"
+# เหตุผลที่ต้องจัดรูปใหม่: SQL เรียงและเทียบวันที่จากรูปแบบเดิมไม่ได้
+# แต่ปียังเป็น พ.ศ. เหมือนต้นฉบับ ไม่แปลงเป็น ค.ศ.
 # ----------------------------------------------------------------------------
 TH_MONTHS = {"ม.ค.": 1, "ก.พ.": 2, "มี.ค.": 3, "เม.ย.": 4, "พ.ค.": 5, "มิ.ย.": 6,
              "ก.ค.": 7, "ส.ค.": 8, "ก.ย.": 9, "ต.ค.": 10, "พ.ย.": 11, "ธ.ค.": 12}
@@ -49,8 +54,13 @@ def parse_thai_date(s):
     if not mon:
         return None
     be = int(m.group(3))
+    # ตรวจความถูกต้องของวันด้วยปฏิทิน ค.ศ. เสมอ
+    # เพราะวันอธิกสุรทินอิงปี ค.ศ. เช่น 29 ก.พ. 2559 มีจริง (ค.ศ. 2016 เป็นปีอธิกสุรทิน)
+    # แต่ datetime(2559, 2, 29) จะ error เพราะ 2559 หารสี่ไม่ลงตัว
+    # จึงเก็บเป็น datetime ค.ศ. ไว้คำนวณ แล้วบวก 543 ตอนแสดงผล
+    ce = be - 543 if be > 2300 else be
     try:
-        return datetime(be - 543 if be > 2300 else be, mon, int(m.group(1)),
+        return datetime(ce, mon, int(m.group(1)),
                         int(m.group(4) or 0), int(m.group(5) or 0))
     except ValueError:
         return None
@@ -70,13 +80,22 @@ def build_dataframe():
 
     rec = src["tci_no_datestamp"].apply(parse_thai_date)
     clo = src["close_date"].apply(parse_thai_date)
-    days = (pd.to_datetime(clo) - pd.to_datetime(rec)).dt.days
+
+    # ปี พ.ศ. เกินช่วงที่ pandas datetime64 รองรับ (สูงสุด ค.ศ. 2262)
+    # จึงลบกันด้วย datetime ของ Python ตรง ๆ
+    days = [ (c - r).days if (_ok(r) and _ok(c)) else None for r, c in zip(rec, clo) ]
+
+    def _iso(d):
+        # ปปปป-ดด-วว โดยปีเป็น พ.ศ. (datetime ข้างในเป็น ค.ศ. จึงบวก 543 ตอนนี้)
+        return "%04d-%02d-%02d" % (d.year + 543, d.month, d.day) if _ok(d) else None
 
     df = pd.DataFrame()
     df["complaint_no"] = src["tci_no"]
-    df["received_date"] = rec.apply(lambda d: d.strftime("%Y-%m-%d") if _ok(d) else None)
-    df["closed_date"] = clo.apply(lambda d: d.strftime("%Y-%m-%d") if _ok(d) else None)
-    df["year"] = rec.apply(lambda d: int(d.year) if _ok(d) else None)
+    df["received_date"] = rec.apply(_iso)
+    df["closed_date"] = clo.apply(_iso)
+    df["received_date_raw"] = src["tci_no_datestamp"]
+    df["closed_date_raw"] = src["close_date"]
+    df["year"] = rec.apply(lambda d: int(d.year) + 543 if _ok(d) else None)
     df["month"] = rec.apply(lambda d: int(d.month) if _ok(d) else None)
     df["days_to_close"] = days
     df["provider"] = src["provider_id"]
@@ -97,14 +116,22 @@ def build_dataframe():
     df["problem_detail"] = parts.apply(lambda p: pick(p, 4))
     df["category_full"] = src["category_id"]
 
+    # ปี เดือน และจำนวนวัน ต้องเป็นจำนวนเต็ม ไม่ใช่ทศนิยม
+    # pandas เปลี่ยนเป็น float อัตโนมัติเมื่อมีค่าว่าง จึงบังคับเป็น Int64 ที่รองรับค่าว่าง
+    for c in ("year", "month", "days_to_close"):
+        df[c] = pd.array(df[c], dtype="Int64")
+
     return df
 
 
 def write_db(df):
-    if DB.exists():
-        DB.chmod(stat.S_IWUSR | stat.S_IRUSR)
+    # สร้างนอกโฟลเดอร์ปลายทางก่อน เพราะบางระบบไฟล์ลบ journal ของ sqlite ไม่ได้
+    # แล้วค่อยคัดลอกทับ การคัดลอกทับเป็นการเขียน ไม่ใช่การลบ จึงผ่านเสมอ
+    tmp = Path(tempfile.gettempdir()) / "complaints_build.db"
+    if tmp.exists():
+        tmp.unlink()
 
-    conn = sqlite3.connect(DB)
+    conn = sqlite3.connect(tmp)
     df.to_sql(TABLE, conn, index=False, if_exists="replace")
     cur = conn.cursor()
     cur.execute(f"DROP INDEX IF EXISTS idx_provider_group")
@@ -113,6 +140,12 @@ def write_db(df):
     conn.commit()
     conn.execute("VACUUM")
     conn.close()
+
+    DATA_DIR.mkdir(exist_ok=True)
+    if DB.exists():
+        DB.chmod(stat.S_IWUSR | stat.S_IRUSR)
+    shutil.copyfile(tmp, DB)
+    tmp.unlink()
 
     DB.chmod(stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
     print(f"สร้างฐานข้อมูล: {DB}  ({DB.stat().st_size / 1e6:.1f} MB, permission 444)")
@@ -128,6 +161,14 @@ def verify():
     print(f"คอลัมน์ ({len(cols)}): {', '.join(cols)}")
     cur.execute(f"SELECT COUNT(DISTINCT provider) FROM {TABLE}")
     print(f"ผู้ให้บริการ: {cur.fetchone()[0]} ชื่อ (ตามต้นฉบับ ไม่จัดกลุ่ม)")
+    cur.execute(f"SELECT MIN(year), MAX(year) FROM {TABLE} WHERE year IS NOT NULL")
+    a, b = cur.fetchone()
+    print(f"ปี (พ.ศ. ตามต้นฉบับ): {a} ถึง {b}")
+    cur.execute(f"SELECT received_date_raw, received_date, year FROM {TABLE} "
+                f"WHERE received_date_raw IS NOT NULL LIMIT 3")
+    print("ตัวอย่าง ต้นฉบับ -> ที่เก็บ:")
+    for r in cur.fetchall():
+        print(f"  {r[0]:24} -> {r[1]}  (year={r[2]})")
 
     print("\n--- ทดสอบ read-only ---")
     for sql in [f"DELETE FROM {TABLE}", f"UPDATE {TABLE} SET province='x'",

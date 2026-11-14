@@ -18,13 +18,13 @@ cases:
   - id: d01
     type: direct
     question: ปี 2564 มีเรื่องร้องเรียนทั้งหมดกี่เรื่อง
-    query: {metric: count, filters: {year: [2021]}}
+    query: {metric: count, filters: {year: [2564]}}
     top_n: 1
 
   - id: d02
     type: direct
     question: 5 จังหวัดที่มีเรื่องร้องเรียนมากที่สุดในปี 2564 คือจังหวัดอะไรบ้าง
-    query: {metric: count, group_by: [province], filters: {year: [2021]}, limit: 5}
+    query: {metric: count, group_by: [province], filters: {year: [2564]}, limit: 5}
     top_n: 3
 
   - id: d03
@@ -72,7 +72,7 @@ cases:
   - id: d10
     type: direct
     question: ปี 2559 มีเรื่องร้องเรียนกี่เรื่อง และมากกว่าปี 2558 เท่าไร
-    query: {metric: count, group_by: [year], filters: {year: [2015, 2016]}}
+    query: {metric: count, group_by: [year], filters: {year: [2558, 2559]}}
     top_n: 2
 
   - id: d11

@@ -8,6 +8,9 @@ data/*.db-journal
 data/*.csv
 data/*.json
 
+# ผลการประเมิน สร้างใหม่ได้ด้วย python3 -m eval.run_eval
+eval/results_*.json
+
 # ผลลัพธ์ระหว่างรัน
 charts/*
 !charts/.gitkeep

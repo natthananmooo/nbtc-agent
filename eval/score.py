@@ -1,0 +1,147 @@
+"""
+eval/score.py - คิดคะแนนสองแกน ด้วยสูตรตายตัว ไม่ใช้ LLM ตัดสิน
+
+ทำไมไม่ใช้ LLM เป็นกรรมการ
+  ใช้ LLM ตัดสินจะได้คะแนนที่อธิบายไม่ได้ และเปลี่ยนไปทุกครั้งที่รัน
+  สองแกนนี้คำนวณตรง ๆ ได้ จึงไม่จำเป็นต้องใช้
+
+correctness   คำตอบตรงกับเฉลยที่คำนวณจาก SQL ไหม
+              นับจากค่าที่ต้องปรากฏ และชื่อกลุ่มที่ต้องปรากฏ
+              ชนิด clarify ถูกต้องคือ "ถามกลับ" ไม่ใช่ตอบตัวเลข
+
+faithfulness  ตัวเลขทุกตัวในคำตอบ มาจากผลลัพธ์ของ tool จริงไหม
+              = จำนวนตัวเลขที่หาเจอใน context / จำนวนตัวเลขทั้งหมดในคำตอบ
+              ถ้าโมเดลเติมตัวเลขเอง คะแนนจะตก
+"""
+
+from __future__ import annotations
+
+import json
+import re
+
+NUM = re.compile(r"-?\d[\d,]*(?:\.\d+)?")
+
+# คำที่บอกว่ากำลังถามกลับ
+ASK_MARKERS = ("?", "หมายถึง", "แบบไหน", "ช่วยระบุ", "อยากทราบว่า", "ต้องการ",
+               "ระบุให้ชัด", "หรือไม่ครับ", "ไหนครับ", "ไหนคะ", "โปรดระบุ")
+
+# คำที่บอกว่ากำลังปฏิเสธเพราะไม่มีข้อมูล ถือว่าถูกต้องสำหรับชนิด clarify
+NO_DATA_MARKERS = ("ไม่มีข้อมูล", "ไม่พบข้อมูล", "ไม่มีค่านี้", "ตอบไม่ได้",
+                   "ไม่สามารถตอบ", "ฐานข้อมูลไม่มี")
+
+
+def numbers(text: str) -> list[float]:
+    out = []
+    for m in NUM.findall(text or ""):
+        try:
+            out.append(float(m.replace(",", "")))
+        except ValueError:
+            pass
+    return out
+
+
+def _close(a: float, b: float) -> bool:
+    """
+    จำนวนนับต้องตรงเป๊ะ เพราะ 798 กับ 800 คือคนละคำตอบ
+    ยอมให้ต่างได้เฉพาะค่าที่มีทศนิยม เช่น 70.54 กับ 70.5 ที่เป็นเรื่องการปัดเศษ
+    """
+    if a == int(a) and b == int(b):
+        return a == b
+    return abs(a - b) <= max(0.05, abs(a) * 0.01)
+
+
+def _found(value: float, pool: list[float]) -> bool:
+    return any(_close(value, p) for p in pool)
+
+
+# ------------------------------------------------------------- faithfulness
+def faithfulness(answer: str, context: list[dict]) -> tuple[float, list[float]]:
+    """คืน (คะแนน, รายการตัวเลขที่หาที่มาไม่ได้)"""
+    blob = "\n".join(json.dumps(c, ensure_ascii=False) if isinstance(c, dict) else str(c)
+                     for c in context)
+    pool = numbers(blob)
+    claimed = numbers(answer)
+    if not claimed:
+        return 1.0, []          # ไม่มีตัวเลขให้ผิด
+    bad = [n for n in claimed if not _found(n, pool)]
+    return round(1 - len(bad) / len(claimed), 4), bad
+
+
+# -------------------------------------------------------------- correctness
+def _expected(truth: dict) -> tuple[list[float], list[str]]:
+    """ดึงค่าตัวเลขและชื่อกลุ่มที่คำตอบต้องกล่าวถึง"""
+    values: list[float] = []
+    labels: list[str] = []
+    rows = truth["rows"][: truth.get("top_n", 1)]
+    for r in rows:
+        for k, v in r.items():
+            if k == "n":
+                continue
+            if isinstance(v, (int, float)):
+                values.append(float(v))
+            elif isinstance(v, str):
+                labels.append(v)
+    for r in truth.get("rows_b", [])[: truth.get("top_n", 1)]:
+        for k, v in r.items():
+            if k != "n" and isinstance(v, (int, float)):
+                values.append(float(v))
+    return values, labels
+
+
+def correctness(case: dict, answer: str, truth: dict) -> tuple[float, dict]:
+    answer = answer or ""
+
+    if truth["kind"] == "clarify":
+        asked = any(m in answer for m in ASK_MARKERS)
+        refused = any(m in answer for m in NO_DATA_MARKERS)
+        ok = asked or refused
+        return (1.0 if ok else 0.0), {
+            "ถามกลับ": asked, "บอกว่าไม่มีข้อมูล": refused,
+            "เหตุผลที่ต้องถาม": case.get("why", "")}
+
+    values, labels = _expected(truth)
+    pool = numbers(answer)
+
+    hit_v = [v for v in values if _found(v, pool)]
+    hit_l = [l for l in labels if l in answer]
+
+    parts = []
+    if values:
+        parts.append(len(hit_v) / len(values))
+    if labels:
+        parts.append(len(hit_l) / len(labels))
+    score = sum(parts) / len(parts) if parts else 0.0
+
+    return round(score, 4), {
+        "ค่าที่ต้องมี": values, "เจอ": hit_v,
+        "ชื่อกลุ่มที่ต้องมี": labels, "เจอชื่อ": hit_l,
+    }
+
+
+if __name__ == "__main__":
+    ctx = [{"tool": "query_complaints",
+            "output": json.dumps({"rows": [{"province": "กรุงเทพมหานคร", "count": 798},
+                                           {"province": "นนทบุรี", "count": 172}],
+                                  "sql_used": "SELECT ..."}, ensure_ascii=False)}]
+    truth = {"kind": "rows", "top_n": 2,
+             "rows": [{"province": "กรุงเทพมหานคร", "count": 798},
+                      {"province": "นนทบุรี", "count": 172}]}
+
+    tests = [
+        ("ตอบถูกครบ", "กรุงเทพมหานคร 798 เรื่อง รองลงมานนทบุรี 172 เรื่อง"),
+        ("ตอบถูกครึ่งเดียว", "กรุงเทพมหานคร 798 เรื่อง"),
+        ("เดาตัวเลขเพิ่ม", "กรุงเทพมหานคร 798 เรื่อง นนทบุรี 172 เรื่อง และเชียงใหม่ 999 เรื่อง"),
+        ("ตอบถูกแต่เดาล้วน", "กรุงเทพมหานคร 800 เรื่อง"),
+    ]
+    for name, ans in tests:
+        c, _ = correctness({}, ans, truth)
+        f, bad = faithfulness(ans, ctx)
+        print("%-18s correctness %.2f  faithfulness %.2f  %s"
+              % (name, c, f, ("ตัวเลขไม่มีที่มา: %s" % bad) if bad else ""))
+
+    print()
+    for name, ans in [("ถามกลับ", "หมายถึงกลุ่มปัญหาไหนครับ"),
+                      ("บอกว่าไม่มี", "ไม่มีข้อมูลนี้ในฐานข้อมูล"),
+                      ("เดาไปเลย", "มี 1,234 เรื่องครับ")]:
+        c, d = correctness({"why": "x"}, ans, {"kind": "clarify"})
+        print("clarify %-12s correctness %.2f  %s" % (name, c, d))

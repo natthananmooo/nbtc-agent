@@ -30,6 +30,8 @@ class Tracer:
     def __init__(self):
         self.client = None
         self.context: list[dict] = []     # ข้อมูลที่ดึงมาในรอบนี้ ใช้วัด faithfulness
+        self.last_trace_id: str | None = None
+        self.run_label = os.environ.get("RUN_LABEL")   # แยกรอบมี RAG กับไม่มี RAG
 
         pub = os.environ.get("LANGFUSE_PUBLIC_KEY")
         sec = os.environ.get("LANGFUSE_SECRET_KEY")
@@ -59,10 +61,16 @@ class Tracer:
         if not self.enabled:
             yield None
             return
+        meta = {}
+        if session_id:
+            meta["session_id"] = session_id
+        if self.run_label:
+            meta["run_label"] = self.run_label
         with self.client.start_as_current_observation(
             name="ถาม-ตอบหนึ่งรอบ", as_type="agent", input={"question": text},
-            metadata={"session_id": session_id} if session_id else None,
+            metadata=meta or None,
         ) as root:
+            self.last_trace_id = self.client.get_current_trace_id()
             try:
                 yield root
             finally:
@@ -106,13 +114,29 @@ class Tracer:
         self.client.set_current_trace_io(input=question, output=answer)
 
 
+    # ------------------------------------------------------------ ให้คะแนน
+    def add_score(self, name: str, value: float, comment: str = "",
+                  trace_id: str | None = None):
+        """ส่งคะแนน correctness หรือ faithfulness ผูกกับ trace ของคำถามนั้น"""
+        tid = trace_id or self.last_trace_id
+        if not (self.enabled and tid):
+            return
+        self.client.create_score(
+            name=name, value=float(value), trace_id=tid,
+            data_type="NUMERIC", comment=comment[:900] or None)
+        self.client.flush()
+
+
 class _Span:
     def __init__(self, tracer, name, kind, span):
         self.tracer, self.name, self.kind, self.span = tracer, name, kind, span
 
     def done(self, output, **meta):
-        if self.kind == "retriever":
-            self.tracer.context.append({"tool": self.name, "output": output})
+        # เก็บผลของ tool ทุกตัว (ยกเว้นคำตอบของโมเดล) ไว้เป็น context
+        # เพราะตัวเลขที่ analyze_results คำนวณ ก็ถือว่ามาจากข้อมูลจริงเช่นกัน
+        if self.kind != "generation":
+            self.tracer.context.append(
+                {"tool": self.name, "kind": self.kind, "output": output})
         if self.span is not None:
             self.span.update(output=output, metadata=meta or None)
 

@@ -76,7 +76,10 @@ def query_complaints(
         filters: เช่น {"year": [2021], "service_type": ["อินเทอร์เน็ต"]}
         date_from: วันเริ่ม รูปแบบ YYYY-MM-DD กรองจากวันรับเรื่อง
         date_to: วันสิ้นสุด รูปแบบ YYYY-MM-DD
-        order_by: เรียงตามคอลัมน์นี้จากน้อยไปมาก ถ้าไม่ระบุจะเรียงตามค่าที่วัดจากมากไปน้อย
+        order_by: ใส่ชื่อคอลัมน์เพื่อเรียงจากน้อยไปมาก เช่น year
+                  หรือใส่ชื่อ metric เช่น count เพื่อเรียงจากมากไปน้อย
+                  สำคัญ: ถ้าคำถามถามว่า "ปีไหนมากที่สุด" ต้องใส่ order_by=count
+                  เพราะถ้าไม่ใส่ ระบบจะเรียงตามปีจากเก่าไปใหม่
         limit: จำนวนแถวสูงสุด
     """
     return _query(metric, group_by, filters, date_from, date_to, order_by, limit)

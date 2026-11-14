@@ -92,7 +92,12 @@ def query_complaints(
     where_sql = _sql_where(where)
     group_sql = (" GROUP BY " + ", ".join(groups)) if groups else ""
 
-    if order_by:
+    # order_by รับได้สองแบบ
+    #   ชื่อคอลัมน์ -> เรียงจากน้อยไปมาก (เช่น เรียงตามปี)
+    #   ชื่อ metric -> เรียงจากมากไปน้อย (เช่น หา "อันดับหนึ่ง")
+    if order_by in ("count", "n", "share_pct", "avg_days_to_close"):
+        ob = ("count" if order_by == "share_pct" else order_by) + " DESC"
+    elif order_by:
         ob = db.check_dimension(order_by) + " ASC"
     elif groups and groups[0] in ("year", "month"):
         ob = ", ".join(groups) + " ASC"     # ข้อมูลตามเวลา เรียงเก่าไปใหม่

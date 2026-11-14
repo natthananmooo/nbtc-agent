@@ -1,0 +1,207 @@
+# ชุดคำถามทดสอบ สำหรับวัด correctness และ faithfulness
+#
+# หลักการ: เฉลยไม่เขียนด้วยมือ
+#   คนเขียนแค่ "คำถาม" กับ "พารามิเตอร์ที่ถูกต้อง"
+#   ตัวเลขเฉลยคำนวณจาก query_complaints ตอนรันทุกครั้ง
+#   ถ้าข้อมูลต้นทางอัปเดต เฉลยอัปเดตตาม ไม่ต้องแก้ไฟล์นี้
+#
+# ชนิดคำถาม
+#   direct    ตอบได้ตรง ๆ ไม่ต้องแปลงคำ
+#   resolve   ต้องแปลงคำผู้ใช้เป็นค่าในฐานข้อมูลก่อน
+#   clarify   กำกวม ระบบต้องถามกลับ ไม่ใช่ตอบตัวเลข
+#
+# top_n = กี่อันดับแรกของผลลัพธ์ที่ต้องปรากฏในคำตอบจึงจะนับว่าถูก
+
+cases:
+
+  # ---------- direct ----------
+  - id: d01
+    type: direct
+    question: ปี 2564 มีเรื่องร้องเรียนทั้งหมดกี่เรื่อง
+    query: {metric: count, filters: {year: [2021]}}
+    top_n: 1
+
+  - id: d02
+    type: direct
+    question: 5 จังหวัดที่มีเรื่องร้องเรียนมากที่สุดในปี 2564 คือจังหวัดอะไรบ้าง
+    query: {metric: count, group_by: [province], filters: {year: [2021]}, limit: 5}
+    top_n: 3
+
+  - id: d03
+    type: direct
+    question: จำนวนเรื่องร้องเรียนแต่ละปีตั้งแต่ปี 2552 ถึงปัจจุบันเป็นอย่างไร
+    query: {metric: count, group_by: [year]}
+    top_n: 3
+
+  - id: d04
+    type: direct
+    question: ปีไหนมีเรื่องร้องเรียนมากที่สุด
+    query: {metric: count, group_by: [year], order_by: count, limit: 1}
+    top_n: 1
+
+  - id: d05
+    type: direct
+    question: ช่องทางรับเรื่องร้องเรียนช่องทางไหนถูกใช้มากที่สุด 3 อันดับแรก
+    query: {metric: count, group_by: [channel], limit: 3}
+    top_n: 3
+
+  - id: d06
+    type: direct
+    question: สัดส่วนเรื่องร้องเรียนแยกตามประเภทบริการเป็นอย่างไร
+    query: {metric: share_pct, group_by: [service_type], limit: 5}
+    top_n: 2
+
+  - id: d07
+    type: direct
+    question: ระยะเวลาปิดเรื่องเฉลี่ยของแต่ละภูมิภาคเป็นกี่วัน
+    query: {metric: avg_days_to_close, group_by: [region]}
+    top_n: 2
+
+  - id: d08
+    type: direct
+    question: กลุ่มปัญหาที่ถูกร้องเรียนมากที่สุด 5 อันดับแรกคืออะไร
+    query: {metric: count, group_by: [problem_group], limit: 5}
+    top_n: 3
+
+  - id: d09
+    type: direct
+    question: เรื่องที่ปิดแล้วกับยังไม่ปิด มีอย่างละกี่เรื่อง
+    query: {metric: count, group_by: [status]}
+    top_n: 2
+
+  - id: d10
+    type: direct
+    question: ปี 2559 มีเรื่องร้องเรียนกี่เรื่อง และมากกว่าปี 2558 เท่าไร
+    query: {metric: count, group_by: [year], filters: {year: [2015, 2016]}}
+    top_n: 2
+
+  - id: d11
+    type: direct
+    question: ภูมิภาคไหนมีเรื่องร้องเรียนมากที่สุด
+    query: {metric: count, group_by: [region], limit: 3}
+    top_n: 1
+
+  - id: d12
+    type: direct
+    question: เดือนไหนของปีที่มีเรื่องร้องเรียนเข้ามามากที่สุด
+    query: {metric: count, group_by: [month], order_by: count, limit: 3}
+    top_n: 1
+
+  # ---------- resolve ----------
+  - id: r01
+    type: resolve
+    question: AIS ถูกร้องเรียนทั้งหมดกี่เรื่อง
+    resolve: {phrase: AIS, field: provider}
+    query: {metric: count}
+    top_n: 1
+
+  - id: r02
+    type: resolve
+    question: ทรูถูกร้องเรียนทั้งหมดกี่เรื่อง
+    resolve: {phrase: ทรู, field: provider}
+    query: {metric: count}
+    top_n: 1
+
+  - id: r03
+    type: resolve
+    question: เรื่องร้องเรียนเกี่ยวกับมือถือมีกี่เรื่อง
+    resolve: {phrase: มือถือ, field: service_type}
+    query: {metric: count}
+    top_n: 1
+
+  - id: r04
+    type: resolve
+    question: ภาคเหนือมีเรื่องร้องเรียนกี่เรื่อง
+    resolve: {phrase: ภาคเหนือ, field: region}
+    query: {metric: count}
+    top_n: 1
+
+  - id: r05
+    type: resolve
+    question: เชียงใหม่มีเรื่องร้องเรียนกี่เรื่อง
+    resolve: {phrase: เชียงใหม่, field: province}
+    query: {metric: count}
+    top_n: 1
+
+  - id: r06
+    type: resolve
+    question: เรื่องร้องเรียนเรื่องเน็ตมีกี่เรื่อง
+    resolve: {phrase: เน็ต, field: service_type}
+    query: {metric: count}
+    top_n: 1
+
+  - id: r07
+    type: resolve
+    question: AIS ถูกร้องเรียนแต่ละปีกี่เรื่อง
+    resolve: {phrase: AIS, field: provider}
+    query: {metric: count, group_by: [year], limit: 5}
+    top_n: 2
+
+  - id: r08
+    type: resolve
+    question: โทรศัพท์บ้านมีเรื่องร้องเรียนกี่เรื่อง
+    resolve: {phrase: โทรศัพท์บ้าน, field: service_type}
+    query: {metric: count}
+    top_n: 1
+
+  - id: r09
+    type: resolve
+    question: ปัญหาเรื่องมือถือในภาคเหนือมีกี่เรื่อง
+    resolve: {phrase: มือถือ, field: service_type}
+    extra_filters: {region: [ภาคเหนือ]}
+    query: {metric: count}
+    top_n: 1
+
+  - id: r10
+    type: resolve
+    question: ทรูถูกร้องเรียนเรื่องอะไรมากที่สุด 3 อันดับแรก
+    resolve: {phrase: ทรู, field: provider}
+    query: {metric: count, group_by: [problem_group], limit: 3}
+    top_n: 2
+
+  - id: r11
+    type: resolve
+    question: AIS กับทรู ใครถูกร้องเรียนมากกว่ากัน
+    resolve: {phrase: AIS, field: provider}
+    compare_with: {phrase: ทรู, field: provider}
+    query: {metric: count}
+    top_n: 1
+
+  - id: r12
+    type: resolve
+    question: อินเทอร์เน็ตถูกร้องเรียนเรื่องอะไรมากที่สุด
+    resolve: {phrase: อินเตอร์เน็ต, field: service_type}
+    query: {metric: count, group_by: [problem_group], limit: 3}
+    top_n: 2
+
+  # ---------- clarify ----------
+  # ไม่มีเฉลยเป็นตัวเลข ถูกต้องคือระบบถามกลับ ไม่ใช่เดา
+  - id: c01
+    type: clarify
+    question: เน็ตช้ามีคนร้องเรียนเยอะไหม
+    why: ตรงได้หลายกลุ่มปัญหา ต้องถามว่าหมายถึงหมวดไหน
+
+  - id: c02
+    type: clarify
+    question: ยอดร้องเรียนช่วงล่าสุดเป็นอย่างไร
+    why: ไม่ระบุว่าล่าสุดคือเดือน ไตรมาส หรือปี
+
+  - id: c03
+    type: clarify
+    question: ค่ายไหนบริการแย่ที่สุด
+    why: ฐานข้อมูลมีแต่จำนวนเรื่อง ไม่มีคะแนนคุณภาพ และไม่ได้หารจำนวนลูกค้า
+
+  - id: c04
+    type: clarify
+    question: ปัญหาสัญญาณมีกี่เรื่อง
+    why: มีสองค่าใกล้กันคือ คุณภาพสัญญาณ และ คุณภาพสัญญาณ QoS
+
+  - id: c05
+    type: clarify
+    question: ร้องเรียนเรื่องดาวเทียมมีกี่เรื่อง
+    why: ไม่มีค่านี้ชัดเจนในฐานข้อมูล ต้องบอกว่าไม่มีหรือเสนอค่าที่ใกล้เคียง
+
+  - id: c06
+    type: clarify
+    question: เทียบปีนี้กับปีที่แล้วหน่อย
+    why: ไม่ระบุว่าเทียบตัวชี้วัดอะไร และไม่ระบุมิติที่จะแยก

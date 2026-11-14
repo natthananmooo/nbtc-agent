@@ -22,7 +22,7 @@ from pathlib import Path
 
 import yaml
 
-from . import bm25, db, embed
+from . import bm25, db, rerank
 
 ALIAS_FILE = Path(__file__).resolve().parent.parent / "aliases.yaml"
 
@@ -42,19 +42,19 @@ MAX_MENU = 30   # จำนวนค่าสูงสุดที่ส่ง�
 MIN_FUZZY = 0.78
 MIN_SUBSTRING = 0.70
 
-# เกณฑ์ของชั้นเวกเตอร์ แยกจากเกณฑ์ตัวอักษรเพราะคะแนนคนละสเกลกัน
-# โมเดล e5 ให้คะแนนพื้นฐานสูงอยู่แล้ว ข้อความที่ไม่เกี่ยวกันเลยก็ยังได้ราว 0.75
-# จึงต้องตั้งพื้นสูงและดูระยะห่างระหว่างอันดับหนึ่งกับอันดับสองด้วย
-VEC_FLOOR = float(os.environ.get("VEC_FLOOR", "0.82"))   # ต่ำกว่านี้ถือว่าไม่เกี่ยว
-VEC_HIGH = float(os.environ.get("VEC_HIGH", "0.88"))     # สูงกว่านี้จึงจะใช้เลยได้
-VEC_GAP = float(os.environ.get("VEC_GAP", "0.03"))       # ต้องนำอันดับสองเท่านี้
 VEC_TOP = 3
 
-# คอลัมน์ที่ให้ชั้นเวกเตอร์ทำงาน เฉพาะที่ค่าเป็นคำบรรยายซึ่งมีความหมายให้เทียบ
-# ชื่อเฉพาะอย่างจังหวัด อำเภอ และชื่อนิติบุคคล ใช้ไม่ได้
-# วัดแล้วพบว่า "เมืองกรุง" ได้ นครนายก 0.808 แซง กรุงเทพมหานคร 0.807
-# ห่างกัน 0.001 คือสัญญาณรบกวนล้วน ๆ ชื่อพวกนี้ต้องพึ่ง alias กับการเทียบตัวอักษร
-VEC_FIELDS = ("problem_group", "problem_detail", "service_type",
+# คอลัมน์ที่ให้ชั้น bm25 กับชั้นจัดอันดับทำงาน
+# เฉพาะคอลัมน์ที่ค่าเป็นคำบรรยายซึ่งมีความหมายให้เทียบ
+#
+# ชื่อเฉพาะอย่างจังหวัด อำเภอ และชื่อนิติบุคคล ต้องกันออกทั้งสองชั้น
+#   วัดด้วย bi-encoder  "เมืองกรุง" ได้ นครนายก 0.808 แซง กรุงเทพมหานคร 0.807
+#   วัดด้วย bm25        "เน็ตช้า" ตัดได้ เน็ต|ช้า ไปชนคำว่าเน็ตใน ไตรเน็ต
+#                       แล้วตอบ บริษัท ดีแทค ไตรเน็ต จำกัด แบบมั่นใจเต็มที่
+# ชื่อองค์กรต้องมาจาก alias ที่คนเขียน หรือจากการที่คำนั้นอยู่ในชื่อจริง ๆ เท่านั้น
+#
+# อีกเหตุผลคือ cross-encoder ต้องรันครั้งละคู่ คอลัมน์ที่มีค่าเป็นร้อยเป็นพันจะช้ามาก
+RAG_FIELDS = ("problem_group", "problem_detail", "service_type",
               "cat_level1", "cat_level2", "channel", "status")
 
 
@@ -63,13 +63,13 @@ def _mode() -> str:
 
     off     เทียบตัวอักษรอย่างเดียว เป็นฐานสำหรับเปรียบเทียบ
     bm25    เพิ่มการตัดคำไทยแล้วนับคำซ้ำ
-    vector  เพิ่มการเทียบความหมายด้วยเวกเตอร์ต่อจาก bm25
+    rerank  เพิ่มการให้คะแนนด้วย cross-encoder ต่อจาก bm25
 
-    แยกสามระดับเพื่อให้วัดได้ว่าโมเดลเวกเตอร์ที่หนักกว่ามาก คุ้มกับที่จ่ายไปไหม
+    แยกสามระดับเพื่อให้วัดได้ว่าโมเดลที่หนักกว่ามาก คุ้มกับที่จ่ายไปไหม
     """
     m = os.environ.get("RAG_MODE", "off").strip().lower()
-    if m in ("1", "on", "true", "yes", "vector"):
-        return "vector"
+    if m in ("1", "on", "true", "yes", "vector", "rerank"):
+        return "rerank"
     if m in ("bm25", "lexical+bm25"):
         return "bm25"
     return "off"
@@ -97,7 +97,7 @@ def _values(field: str) -> tuple[tuple[str, int], ...]:
 def _similarity(phrase: str, value: str) -> tuple[float, str]:
     """
     คืน (คะแนน, ชนิดหลักฐาน) ชนิดเป็น exact, substring หรือ fuzzy
-    ไม่ใช้ embedding ตามขอบเขต MVP แต่เปลี่ยนมาใช้ได้ภายหลังโดยไม่แตะที่อื่น
+    ชั้นนี้ดูแค่ตัวอักษร ส่วนความหมายเป็นงานของ bm25.py กับ rerank.py
     """
     p, v = _norm(phrase), _norm(value)
     if p == v:
@@ -180,9 +180,9 @@ def resolve_filter_values(user_phrase: str, field: str | None = None) -> dict:
 
     # ขั้นที่หนึ่ง ตัดคำไทยแล้วนับคำซ้ำ
     # แก้จุดอ่อนที่ภาษาไทยไม่เว้นวรรค เช่น สัญญาณไม่ดี กับ คุณภาพสัญญาณ
-    if mode in ("bm25", "vector") and not lexical_solid and bm25.available():
+    if mode in ("bm25", "rerank") and not lexical_solid and bm25.available():
         hits = []
-        for f in fields:
+        for f in [x for x in fields if x in RAG_FIELDS]:
             pairs = _values(f)
             counts = dict(pairs)
             for h in bm25.search(f, [v for v, _ in pairs], user_phrase, top_k=VEC_TOP) or []:
@@ -193,21 +193,22 @@ def resolve_filter_values(user_phrase: str, field: str | None = None) -> dict:
             scored = hits
             used = "bm25"
 
-    # ขั้นที่สอง เทียบความหมาย ใช้ต่อเมื่อไม่มีคำไหนซ้ำกันเลย
-    if mode == "vector" and used == "lexical" and not lexical_solid and embed.available():
+    # ขั้นที่สอง ให้คะแนนทุกค่าในคอลัมน์ด้วย cross-encoder
+    # ใช้ต่อเมื่อไม่มีคำไหนซ้ำกันเลย เช่น เน็ตช้า ที่ตัดคำแล้วไม่ชนกับค่าไหน
+    if mode == "rerank" and used == "lexical" and not lexical_solid and rerank.available():
         vec = []
-        for f in [x for x in fields if x in VEC_FIELDS]:
+        for f in [x for x in fields if x in RAG_FIELDS]:
             pairs = _values(f)
             counts = dict(pairs)
-            for h in embed.search(f, [v for v, _ in pairs], user_phrase, top_k=VEC_TOP) or []:
-                if h["score"] >= VEC_FLOOR:
-                    vec.append((h["score"], f, h["value"], counts.get(h["value"], 0), "vector"))
+            for h in rerank.score(f, [v for v, _ in pairs], user_phrase, top_k=VEC_TOP) or []:
+                if h["score"] >= rerank.RERANK_FLOOR:
+                    vec.append((h["score"], f, h["value"], counts.get(h["value"], 0), "rerank"))
         if vec:
             vec.sort(key=lambda t: (-t[0], -t[3]))
             scored = vec
-            used = "vector"
+            used = "rerank"
 
-    vector_used = used == "vector"
+    vector_used = used == "rerank"
     bm25_used = used == "bm25"
 
     if not scored:
@@ -253,7 +254,13 @@ def resolve_filter_values(user_phrase: str, field: str | None = None) -> dict:
         # ไม่มีคู่แข่งเลย แปลว่ามีค่าเดียวที่มีคำซ้ำ เชื่อได้ที่เกณฑ์พื้น
         # มีคู่แข่ง ต้องนำให้ขาดจริง ไม่งั้นถามกลับ
         alone = s2 <= 0 and s1 >= bm25.BM25_FLOOR
-        if alone or (s1 >= bm25.BM25_HIGH and s2 > 0 and s1 / s2 >= bm25.BM25_RATIO):
+        # คะแนน BM25 ของคนละคอลัมน์เทียบกันตรง ๆ ไม่ได้ เพราะคิดจากคลังคำคนละชุด
+        # คำที่หายากในคอลัมน์เล็กจะได้คะแนนพุ่งกว่าคำเดียวกันในคอลัมน์ใหญ่เสมอ
+        # ถ้าผู้ใช้ไม่ได้ระบุคอลัมน์ จึงให้ได้แค่ ambiguous แล้วถามกลับว่าหมายถึงด้านไหน
+        single_field = field is not None
+        if single_field and (
+            alone or (s1 >= bm25.BM25_HIGH and s2 > 0 and s1 / s2 >= bm25.BM25_RATIO)
+        ):
             conf, note = "high", (
                 "จับคู่ได้จากคำที่ซ้ำกันหลังตัดคำไทย ใช้ค่านี้ได้ "
                 "ต้องบอกผู้ใช้ว่าตีความคำของเขาเป็นค่าอะไรในฐานข้อมูล "
@@ -265,17 +272,18 @@ def resolve_filter_values(user_phrase: str, field: str | None = None) -> dict:
     elif vector_used:
         # จับคู่ด้วยความหมาย ไม่มีหลักฐานตัวอักษรรองรับ จึงต้องเข้มกว่าปกติ
         # ถ้าไม่ขาดลอยจริง ให้ถามกลับ ดีกว่าเดาแล้วได้ SQL ที่ถูก syntax แต่ผิดความหมาย
-        clear = cands[0]["score"] >= VEC_HIGH and (
-            len(cands) == 1 or cands[0]["score"] - cands[1]["score"] >= VEC_GAP
+        clear = cands[0]["score"] >= rerank.RERANK_HIGH and (
+            len(cands) == 1
+            or cands[0]["score"] - cands[1]["score"] >= rerank.RERANK_MARGIN
         )
         if clear:
             conf, note = "high", (
-                "ไม่มีคำไหนตรงตัว แต่จับคู่ได้จากความหมาย ใช้ค่านี้ได้ "
+                "ไม่มีคำไหนตรงตัว แต่โมเดลให้คะแนนความเกี่ยวข้องสูงชัดเจน ใช้ค่านี้ได้ "
                 "ต้องบอกผู้ใช้ให้ชัดว่าตีความคำของเขาเป็นค่าอะไรในฐานข้อมูล "
                 "ตัวเลข rows คือยอดรวมทุกปี ไม่ใช่คำตอบ ต้องเรียก query_complaints ต่อเสมอ")
         else:
             conf, note = "ambiguous", (
-                "จับคู่ด้วยความหมายแล้วได้หลายค่าที่ใกล้เคียงกัน ห้ามเดา "
+                "ให้คะแนนความเกี่ยวข้องแล้วได้หลายค่าที่สูสีกัน ห้ามเดา "
                 "ให้ถามผู้ใช้ว่าหมายถึงอันไหน พร้อมบอกจำนวนเรื่องของแต่ละตัวเลือก")
     elif cands[0]["score"] >= 0.85 and (
         len(cands) == 1 or cands[0]["score"] - cands[1]["score"] >= 0.15

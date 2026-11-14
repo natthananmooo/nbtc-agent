@@ -14,11 +14,11 @@ COPY mcp_server/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir -r requirements.txt
 
-# ดาวน์โหลดโมเดล embedding ฝังไว้ใน image ตั้งแต่ตอน build
+# ดาวน์โหลดโมเดลจัดอันดับฝังไว้ใน image ตั้งแต่ตอน build
 # ตอนรันจึงไม่ต้องต่ออินเทอร์เน็ต และได้โมเดลเวอร์ชันเดิมทุกครั้งที่รัน
-ARG EMBED_MODEL=intfloat/multilingual-e5-small
-ENV EMBED_MODEL=${EMBED_MODEL}
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('${EMBED_MODEL}')"
+ARG RERANK_MODEL=BAAI/bge-reranker-v2-m3
+ENV RERANK_MODEL=${RERANK_MODEL}
+RUN python -c "from sentence_transformers import CrossEncoder; CrossEncoder('${RERANK_MODEL}', max_length=256)"
 ENV HF_HUB_OFFLINE=1
 
 COPY tools/ ./tools/

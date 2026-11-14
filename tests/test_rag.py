@@ -8,7 +8,7 @@
 import os
 import sys
 
-from tools import bm25, embed, graph
+from tools import bm25, graph, rerank
 from tools.resolve import resolve_filter_values
 
 
@@ -22,11 +22,11 @@ if not bm25.available():
 else:
     bm25.selftest()
 
-head("2. โมเดล embedding จับความหมายภาษาไทยได้จริงไหม")
-if not embed.available():
-    print("โหลดโมเดลไม่สำเร็จ:", embed.load_error())
+head("2. cross-encoder ให้คะแนนความเกี่ยวข้องได้ชัดแค่ไหน")
+if not rerank.available():
+    print("โหลดโมเดลไม่สำเร็จ:", rerank.load_error())
     sys.exit(1)
-embed.selftest()
+rerank.selftest()
 
 head("3. resolve ทั้งสามโหมด")
 cases = [("เน็ตช้า", None), ("เน็ตช้า", "problem_detail"),
@@ -35,7 +35,7 @@ cases = [("เน็ตช้า", None), ("เน็ตช้า", "problem_det
          ("เสาส่งสัญญาณอันตรายต่อสุขภาพ", "problem_group"), ("บริการ", "problem_group"),
          ("มือถือ", "service_type"), ("ดาวอังคาร", "province"),
          ("AIS", None), ("ทรู", None)]
-for mode in ("off", "bm25", "vector"):
+for mode in ("off", "bm25", "rerank"):
     os.environ["RAG_MODE"] = mode
     print("\nRAG_MODE=%s" % mode)
     for phrase, field in cases:

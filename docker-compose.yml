@@ -5,17 +5,17 @@ services:
       context: .
       dockerfile: mcp_server/Dockerfile
       args:
-        # โมเดล embedding ถูกฝังใน image ตอน build ค่านี้จึงต้องส่งตอน build ด้วย
+        # โมเดลถูกฝังใน image ตอน build ค่านี้จึงต้องส่งตอน build ด้วย
         # เปลี่ยนใน .env แล้วรัน docker compose up -d --build mcp
-        EMBED_MODEL: ${EMBED_MODEL:-intfloat/multilingual-e5-small}
+        RERANK_MODEL: ${RERANK_MODEL:-BAAI/bge-reranker-v2-m3}
     container_name: nbtc-mcp
     ports:
       - "8000:8000"
     environment:
-      # off = เทียบตัวอักษรอย่างเดียว  bm25 = ตัดคำไทย  vector = เพิ่มเวกเตอร์
+      # off = เทียบตัวอักษรอย่างเดียว  bm25 = ตัดคำไทย  rerank = เพิ่ม cross-encoder
       # ตั้งค่าใน .env แล้ว docker compose up -d mcp เพื่อสลับตอนวัดผล
       RAG_MODE: ${RAG_MODE:-off}
-      EMBED_MODEL: ${EMBED_MODEL:-intfloat/multilingual-e5-small}
+      RERANK_MODEL: ${RERANK_MODEL:-BAAI/bge-reranker-v2-m3}
     volumes:
       # ชั้นที่ 4 ของกลไกอ่านอย่างเดียว
       # :ro ทำให้ kernel ปฏิเสธการเขียน และโปรเซสอื่นไม่เห็นไฟล์นี้เลย

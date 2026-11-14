@@ -169,7 +169,11 @@ async def build_context(session) -> tuple[str, list[dict]]:
     tools = (await session.list_tools()).tools
     res = await session.read_resource("schema://values")
     schema = res.contents[0].text
-    return SYSTEM_PROMPT.format(schema=schema), mcp_tools_to_openai(tools)
+    # ใช้ replace ไม่ใช้ format
+    # เพราะทั้ง prompt และข้อมูล schema มีวงเล็บปีกกาปนอยู่ได้
+    # เช่น ตัวอย่าง filters={"year": [2564]} หรือคำเตือนเรื่อง placeholder
+    # ซึ่ง str.format จะเข้าใจผิดว่าเป็นตัวแปรแล้วโยน KeyError
+    return SYSTEM_PROMPT.replace("{schema}", schema), mcp_tools_to_openai(tools)
 
 
 async def run_turn(session, client, messages: list[dict], oa_tools: list[dict],

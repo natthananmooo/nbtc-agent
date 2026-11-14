@@ -84,6 +84,7 @@ python3 -m tools.resolve       # การแปลงคำผู้ใช้
 python3 -m tools.query         # การสืบค้นและ warnings
 python3 -m tools.analyze       # การสรุปตัวเลข
 python3 test_mcp_server.py     # คุยกับ MCP Server ผ่านโปรโตคอลจริง
+python3 test_agent_loop.py     # agent loop ทั้งวง โดยไม่ต้องมีคีย์ OpenRouter
 ```
 
 ## โครงสร้างโฟลเดอร์
@@ -96,8 +97,37 @@ aliases.yaml      แมปคำผู้ใช้เป็นค่าใน�
 data/             ฐานข้อมูลและไฟล์ดิบ ไม่ขึ้น git สร้างใหม่ได้จากสคริปต์
 ```
 
+## การประเมินผลด้วย Langfuse
+
+ใส่คีย์ใน `.env` แล้วระบบจะบันทึกเองทุกคำถาม ถ้าไม่ใส่ก็รันได้ปกติ แค่ไม่บันทึก
+
+```
+LANGFUSE_PUBLIC_KEY=pk-lf-...
+LANGFUSE_SECRET_KEY=sk-lf-...
+LANGFUSE_BASE_URL=https://cloud.langfuse.com
+```
+
+สิ่งที่บันทึกต่อหนึ่งคำถาม
+
+| ชนิด | ชื่อ | เก็บอะไร |
+| --- | --- | --- |
+| agent | ถาม-ตอบหนึ่งรอบ | คำถาม คำตอบ และ context ทั้งหมดที่ดึงมา |
+| retriever | `resolve_filter_values` | คำที่พิมพ์ ค่าที่ได้ และ confidence |
+| retriever | `query_complaints` | `sql_used` พารามิเตอร์ แถวที่ได้ และ warnings |
+| tool | `analyze_results`, `render_chart` | อินพุตและเอาต์พุต |
+| generation | `llm` | ข้อความที่ส่งเข้าโมเดล คำตอบ และจำนวน token |
+
+สองตัวแรกบันทึกเป็น `retriever` เพราะเป็นขั้นตอนดึงข้อมูล
+ทำให้เครื่องมือประเมินรู้ว่าอะไรคือ context ที่คำตอบต้องอ้างอิงได้
+
+| ค่าที่วัด | วิธีวัด |
+| --- | --- |
+| correctness | เทียบคำตอบกับเฉลยที่คำนวณจาก SQL โดยตรง |
+| faithfulness | เทียบทุกตัวเลขในคำตอบกับแถวที่ `query_complaints` คืนมา |
+
 ## สิ่งที่ยังไม่ทำ
 
-- Langfuse สำหรับวัด correctness และ faithfulness
+- หน้าเว็บแสดงคำตอบพร้อมแถบบอกว่าไปค้นที่ไหน (จะรันใน Docker)
+- ชุดคำถามทดสอบ 30 ข้อ พร้อมเฉลย สำหรับคิดคะแนน
 - value resolution ด้วย vector เพื่อเทียบว่า correctness ดีขึ้นกี่เปอร์เซ็นต์
 - dashboard รวมหลายกราฟ

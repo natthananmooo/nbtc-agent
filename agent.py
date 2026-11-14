@@ -30,6 +30,8 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.client.streamable_http import streamable_http_client
 
+from observability import tracer
+
 load_dotenv()
 
 MCP_URL = os.environ.get("MCP_URL", "http://127.0.0.1:8000/mcp")
@@ -122,32 +124,50 @@ async def build_context(session) -> tuple[str, list[dict]]:
     return SYSTEM_PROMPT.format(schema=schema), mcp_tools_to_openai(tools)
 
 
-async def run_turn(session, client, messages: list[dict], oa_tools: list[dict]) -> str:
+async def run_turn(session, client, messages: list[dict], oa_tools: list[dict],
+                   question: str) -> str:
     """วนรอบจนกว่าโมเดลจะตอบเป็นข้อความ แทนที่จะขอเรียก tool เพิ่ม"""
-    for step in range(MAX_STEPS):
-        resp = client.chat.completions.create(
-            model=MODEL, messages=messages, tools=oa_tools, tool_choice="auto")
-        msg = resp.choices[0].message
-        messages.append(msg.model_dump(exclude_none=True))
+    with tracer.question(question):
+        answer = "หยุดเพราะเรียก tool เกิน %d รอบแล้วยังไม่ได้คำตอบ" % MAX_STEPS
 
-        if not msg.tool_calls:
-            return msg.content or "(โมเดลไม่ได้ตอบอะไร)"
+        for _ in range(MAX_STEPS):
+            visible = [m for m in messages if m.get("role") != "system"][-8:]
+            with tracer.generation(MODEL, visible) as gen:
+                resp = client.chat.completions.create(
+                    model=MODEL, messages=messages, tools=oa_tools, tool_choice="auto")
+                msg = resp.choices[0].message
+                usage = getattr(resp, "usage", None)
+                gen.done(
+                    msg.content or [c.function.name for c in (msg.tool_calls or [])],
+                    tokens=getattr(usage, "total_tokens", None),
+                )
 
-        for call in msg.tool_calls:
-            name = call.function.name
-            try:
-                args = json.loads(call.function.arguments or "{}")
-            except json.JSONDecodeError:
-                args = {}
-            print("  [เรียก %s %s]" % (name, json.dumps(args, ensure_ascii=False)[:160]),
-                  file=sys.stderr)
-            result = await session.call_tool(name, args)
-            text = "\n".join(c.text for c in result.content if hasattr(c, "text"))
-            if result.is_error:
-                text = "tool ทำงานไม่สำเร็จ: " + text
-            messages.append({"role": "tool", "tool_call_id": call.id, "content": text})
+            messages.append(msg.model_dump(exclude_none=True))
 
-    return "หยุดเพราะเรียก tool เกิน %d รอบแล้วยังไม่ได้คำตอบ" % MAX_STEPS
+            if not msg.tool_calls:
+                answer = msg.content or "(โมเดลไม่ได้ตอบอะไร)"
+                break
+
+            for call in msg.tool_calls:
+                name = call.function.name
+                try:
+                    args = json.loads(call.function.arguments or "{}")
+                except json.JSONDecodeError:
+                    args = {}
+                print("  [เรียก %s %s]"
+                      % (name, json.dumps(args, ensure_ascii=False)[:160]), file=sys.stderr)
+
+                with tracer.tool_call(name, args) as span:
+                    result = await session.call_tool(name, args)
+                    text = "\n".join(c.text for c in result.content if hasattr(c, "text"))
+                    if result.is_error:
+                        text = "tool ทำงานไม่สำเร็จ: " + text
+                    span.done(text, is_error=result.is_error)
+
+                messages.append({"role": "tool", "tool_call_id": call.id, "content": text})
+
+        tracer.finish(question, answer)
+        return answer
 
 
 async def main():
@@ -164,6 +184,9 @@ async def main():
             for t in oa_tools:
                 print(" -", t["function"]["name"])
             return
+
+        print("[Langfuse: %s]" % ("เปิดใช้งาน" if tracer.enabled
+              else "ยังไม่ได้ใส่คีย์ จะไม่บันทึก"), file=sys.stderr)
 
         key = os.environ.get("OPENROUTER_API_KEY")
         if not key:
@@ -190,7 +213,7 @@ async def main():
                 if not q:
                     break
             messages.append({"role": "user", "content": q})
-            print(await run_turn(session, client, messages, oa_tools))
+            print(await run_turn(session, client, messages, oa_tools, q))
             if args and not questions:
                 break
 

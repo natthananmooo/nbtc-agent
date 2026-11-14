@@ -101,19 +101,49 @@ def mcp_tools_to_openai(tools) -> list[dict]:
     } for t in tools]
 
 
-@asynccontextmanager
-async def open_session():
-    """ต่อ MCP Server ผ่าน HTTP ถ้าไม่ได้ ค่อยเปิดเป็น subprocess แบบ stdio"""
+def _root_cause(e: BaseException) -> str:
+    """ดึงสาเหตุจริงออกจาก ExceptionGroup ที่ anyio ห่อไว้หลายชั้น"""
+    while True:
+        subs = getattr(e, "exceptions", None)
+        if not subs:
+            break
+        e = subs[0]
+    return "%s: %s" % (type(e).__name__, e) if str(e) else type(e).__name__
+
+
+async def _http_available() -> tuple[bool, str]:
+    """ลองต่อ MCP Server ผ่าน HTTP หนึ่งครั้ง เพื่อตัดสินว่าจะใช้ทางไหน"""
     try:
-        async with streamable_http_client(MCP_URL) as (read, write, _):
+        async with streamable_http_client(MCP_URL) as (read, write):
             async with ClientSession(read, write) as s:
                 await s.initialize()
-                print("[ต่อ MCP Server ผ่าน HTTP ที่ %s]" % MCP_URL, file=sys.stderr)
+        return True, ""
+    except BaseException as e:
+        return False, _root_cause(e)
+
+
+@asynccontextmanager
+async def open_session():
+    """
+    ต่อ MCP Server ผ่าน HTTP ถ้าไม่ได้ ค่อยเปิดเป็น subprocess แบบ stdio
+
+    ตรวจการเชื่อมต่อให้จบก่อน แล้วค่อยเปิดของจริง
+    ไม่ครอบ yield ด้วย try เพราะถ้าครอบ ข้อผิดพลาดของผู้เรียกจะถูกกลืน
+    แล้วเด้งไปเปิด server ซ้ำโดยไม่จำเป็น
+    """
+    ok, why = await _http_available()
+
+    if ok:
+        print("[ต่อ MCP Server ผ่าน HTTP ที่ %s]" % MCP_URL, file=sys.stderr)
+        async with streamable_http_client(MCP_URL) as (read, write):
+            async with ClientSession(read, write) as s:
+                await s.initialize()
                 yield s
-                return
-    except Exception as e:
-        print("[ต่อผ่าน HTTP ไม่ได้ (%s) ลองเปิดแบบ stdio แทน]" % type(e).__name__,
-              file=sys.stderr)
+        return
+
+    print("[ต่อ HTTP ที่ %s ไม่ได้ -> %s]" % (MCP_URL, why), file=sys.stderr)
+    print("[เปิด MCP Server แบบ stdio แทน ใช้งานได้ปกติ แต่ไม่มี read-only ชั้นที่ 4]",
+          file=sys.stderr)
 
     env = dict(os.environ, MCP_TRANSPORT="stdio", PYTHONPATH=os.getcwd())
     params = StdioServerParameters(
@@ -121,7 +151,6 @@ async def open_session():
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as s:
             await s.initialize()
-            print("[เปิด MCP Server แบบ stdio]", file=sys.stderr)
             yield s
 
 

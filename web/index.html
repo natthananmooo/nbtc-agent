@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ผู้ช่วยวิเคราะห์เรื่องร้องเรียนโทรคมนาคม</title>
+<style>
+  :root { --bg:#faf9f7; --card:#fff; --line:#e3e1db; --ink:#1a1a19; --dim:#6b6a66;
+          --blue:#2a78d6; --orange:#eb6834; --green:#1baf7a; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); line-height:1.65;
+         font-family:-apple-system,"Segoe UI","Noto Sans Thai","Sarabun",sans-serif; }
+  .wrap { max-width:860px; margin:0 auto; padding:32px 20px 80px; }
+  h1 { font-size:21px; font-weight:600; margin:0 0 4px; }
+  .sub { color:var(--dim); font-size:14px; margin:0 0 24px; }
+  form { display:flex; gap:8px; margin-bottom:12px; }
+  input { flex:1; padding:12px 14px; font-size:15px; font-family:inherit;
+          border:1px solid var(--line); border-radius:8px; background:var(--card); }
+  input:focus { outline:2px solid var(--blue); outline-offset:-1px; }
+  button { padding:12px 20px; font-size:15px; font-family:inherit; font-weight:500;
+           border:0; border-radius:8px; background:var(--ink); color:#fff; cursor:pointer; }
+  button:disabled { opacity:.45; cursor:default; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:28px; }
+  .chip { padding:5px 11px; font-size:13px; border:1px solid var(--line);
+          border-radius:999px; background:var(--card); cursor:pointer; color:var(--dim); }
+  .chip:hover { border-color:var(--blue); color:var(--blue); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px;
+          padding:18px 20px; margin-bottom:14px; }
+  .answer { white-space:pre-wrap; font-size:15.5px; }
+  .step-head { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+  .num { width:22px; height:22px; border-radius:50%; background:var(--ink); color:#fff;
+         font-size:12px; display:flex; align-items:center; justify-content:center; flex:none; }
+  .tool { font-family:ui-monospace,Menlo,monospace; font-size:13px; }
+  .how { margin-left:auto; font-size:12.5px; padding:3px 10px; border-radius:999px;
+         background:#eef4fc; color:var(--blue); }
+  .how.warn { background:#fdf0ea; color:var(--orange); }
+  .how.none { background:#f1efec; color:var(--dim); }
+  pre { background:#f6f5f2; border:1px solid var(--line); border-radius:7px;
+        padding:11px 13px; overflow-x:auto; font-size:12.5px; margin:8px 0 0;
+        font-family:ui-monospace,Menlo,monospace; }
+  table { width:100%; border-collapse:collapse; font-size:13.5px; margin-top:8px; }
+  th,td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--line); }
+  th { color:var(--dim); font-weight:500; }
+  ul { margin:8px 0 0; padding-left:20px; font-size:13.5px; }
+  .warn-box { background:#fdf6ea; border:1px solid #f0dcb8; border-radius:7px;
+              padding:10px 13px; margin-top:8px; font-size:13.5px; }
+  .label { font-size:12.5px; color:var(--dim); text-transform:none; margin-top:12px; }
+  .foot { color:var(--dim); font-size:12.5px; margin-top:6px; }
+  .err { background:#fdecec; border:1px solid #f3c6c6; color:#a32d2d; }
+  .spin { color:var(--dim); font-size:14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>ผู้ช่วยวิเคราะห์เรื่องร้องเรียนโทรคมนาคม</h1>
+  <p class="sub">ข้อมูลเปิด กสทช. 42,806 เรื่อง ปี 2552–2569 · ฐานข้อมูลเปิดแบบอ่านอย่างเดียว</p>
+
+  <form id="f">
+    <input id="q" placeholder="พิมพ์คำถามภาษาไทย เช่น AIS ถูกร้องเรียนกี่เรื่อง" autocomplete="off">
+    <button id="go">ถาม</button>
+  </form>
+
+  <div class="chips" id="chips"></div>
+  <div id="out"></div>
+</div>
+
+<script>
+const SAMPLES = [
+  "ปี 2564 จังหวัดไหนร้องเรียนมากที่สุด 5 อันดับ",
+  "AIS ถูกร้องเรียนกี่เรื่อง",
+  "เน็ตช้ามีคนร้องเรียนเยอะไหม",
+  "สัดส่วนเรื่องร้องเรียนแยกตามประเภทบริการ",
+  "ร้องเรียนเรื่องดาวเทียมมีกี่เรื่อง"
+];
+const chips = document.getElementById('chips');
+SAMPLES.forEach(s => {
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'chip'; b.textContent = s;
+  b.onclick = () => { document.getElementById('q').value = s; document.getElementById('f').requestSubmit(); };
+  chips.appendChild(b);
+});
+
+const esc = s => String(s ?? '').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+function rowsTable(rows) {
+  if (!rows || !rows.length) return '';
+  const cols = Object.keys(rows[0]);
+  return '<table><tr>' + cols.map(c => '<th>' + esc(c) + '</th>').join('') + '</tr>' +
+    rows.map(r => '<tr>' + cols.map(c => '<td>' +
+      esc(typeof r[c] === 'number' ? r[c].toLocaleString() : r[c]) + '</td>').join('') + '</tr>').join('') +
+    '</table>';
+}
+
+function stepCard(s, i) {
+  const cls = s.how === 'ไม่พบค่านี้ในฐานข้อมูล' ? 'none'
+            : s.how === 'ค้นแล้วไม่มีข้อมูลตรงเงื่อนไข' ? 'warn'
+            : s.confidence === 'ambiguous' ? 'warn' : '';
+  let body = '';
+
+  if (s.tool === 'resolve_filter_values') {
+    body += '<div class="label">คำที่ผู้ใช้พิมพ์ "' + esc(s.query) + '" ไปตรงกับคอลัมน์ ' +
+            esc(s.field || '-') + ' · ความมั่นใจ ' + esc(s.confidence) + '</div>';
+    if (s.candidates && s.candidates.length) body += rowsTable(s.candidates);
+  } else if (s.tool === 'query_complaints') {
+    if (s.sql) body += '<pre>' + esc(s.sql) +
+      (s.params && s.params.length ? '\n\nparams: ' + esc(JSON.stringify(s.params)) : '') + '</pre>';
+    body += rowsTable(s.rows);
+    (s.warnings || []).forEach(w => body += '<div class="warn-box">' + esc(w) + '</div>');
+  } else if (s.tool === 'analyze_results') {
+    if (s.findings && s.findings.length)
+      body += '<ul>' + s.findings.map(f => '<li>' + esc(f) + '</li>').join('') + '</ul>';
+    (s.caveats || []).forEach(w => body += '<div class="warn-box">' + esc(w) + '</div>');
+  } else if (s.tool === 'render_chart') {
+    body += '<div class="label">' + esc(s.image_path || '') + '</div>';
+  }
+
+  return '<div class="card"><div class="step-head"><span class="num">' + (i + 1) +
+    '</span><span class="tool">' + esc(s.tool) + '</span>' +
+    '<span class="how ' + cls + '">' + esc(s.how || '') + '</span></div>' + body + '</div>';
+}
+
+document.getElementById('f').onsubmit = async e => {
+  e.preventDefault();
+  const q = document.getElementById('q').value.trim();
+  if (!q) return;
+  const out = document.getElementById('out'), go = document.getElementById('go');
+  go.disabled = true;
+  out.innerHTML = '<div class="card spin">กำลังคิด… ระบบจะเลือกเองว่าจะค้นหรือจะถามกลับ</div>';
+  try {
+    const r = await fetch('/api/ask', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({question: q})
+    });
+    const d = await r.json();
+    if (d.error) { out.innerHTML = '<div class="card err">' + esc(d.error) + '</div>'; return; }
+    out.innerHTML =
+      '<div class="card"><div class="answer">' + esc(d.answer) + '</div>' +
+      '<div class="foot">โมเดล ' + esc(d.model) +
+      (d.logged ? ' · บันทึกลง Langfuse แล้ว' : ' · ยังไม่ได้ต่อ Langfuse') + '</div></div>' +
+      '<div class="label" style="margin:18px 0 8px">ระบบไปค้นอะไรมาบ้าง</div>' +
+      (d.steps.length ? d.steps.map(stepCard).join('')
+                      : '<div class="card spin">ไม่ได้เรียก tool เลย ตอบจากบริบทที่มีอยู่</div>');
+  } catch (err) {
+    out.innerHTML = '<div class="card err">ต่อ server ไม่ได้: ' + esc(err.message) + '</div>';
+  } finally { go.disabled = false; }
+};
+</script>
+</body>
+</html>

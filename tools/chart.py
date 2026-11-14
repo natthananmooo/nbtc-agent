@@ -1,6 +1,10 @@
 """
 tools/chart.py - วาดกราฟจากผลลัพธ์ที่ query_complaints คืนมา
 
+matplotlib ถูก import ตอนจะใช้จริงเท่านั้น ไม่ใช่ตอนโหลดไฟล์
+เพราะ MCP Server import ไฟล์นี้เสมอ แต่ผู้ใช้ขอกราฟเป็นบางครั้ง
+ถ้า import ไว้ข้างบน เครื่องที่ไม่มี matplotlib จะเปิด server ไม่ได้เลย
+
 ฟอนต์ไทย
     matplotlib ไม่มีฟอนต์ไทยมาให้ ถ้าไม่มีฟอนต์ ตัวอักษรไทยจะกลายเป็นสี่เหลี่ยม
     ใน Docker ติดตั้งด้วย fonts-thai-tlwg (ดู mcp_server/Dockerfile)
@@ -13,13 +17,6 @@ import os
 import warnings as _warnings
 from pathlib import Path
 
-import matplotlib
-matplotlib.use("Agg")
-# เตือนเรื่องฟอนต์ไว้ใน warnings ที่คืนกลับแล้ว ไม่ต้องพ่นซ้ำทุกตัวอักษร
-_warnings.filterwarnings("ignore", message="Glyph .* missing from font")                       # ไม่เปิดหน้าต่าง เหมาะกับรันใน container
-import matplotlib.pyplot as plt             # noqa: E402
-from matplotlib import font_manager         # noqa: E402
-
 OUT_DIR = Path(os.environ.get("CHART_DIR", Path(__file__).resolve().parent.parent / "charts"))
 
 THAI_HINTS = ("loma", "garuda", "norasi", "kinnari", "sarabun",
@@ -27,8 +24,26 @@ THAI_HINTS = ("loma", "garuda", "norasi", "kinnari", "sarabun",
 
 CHART_TYPES = ("bar", "barh", "line", "pie")
 
+NO_MPL = ("เครื่องนี้ยังไม่ได้ติดตั้ง matplotlib จึงวาดกราฟไม่ได้ "
+          "ติดตั้งด้วย pip install matplotlib แล้วลองใหม่")
+
+
+def _mpl():
+    """โหลด matplotlib ตอนที่จะใช้จริง โยน ImportError ถ้าไม่มี"""
+    import matplotlib
+    matplotlib.use("Agg")
+    # เตือนเรื่องฟอนต์ไว้ใน warnings ที่คืนกลับแล้ว ไม่ต้องพ่นซ้ำทุกตัวอักษร
+    _warnings.filterwarnings("ignore", message="Glyph .* missing from font")
+    import matplotlib.pyplot as plt
+    from matplotlib import font_manager
+    return plt, font_manager
+
 
 def _thai_font() -> str | None:
+    try:
+        _, font_manager = _mpl()
+    except ImportError:
+        return None
     for f in font_manager.fontManager.ttflist:
         if any(h in f.name.lower() for h in THAI_HINTS):
             return f.name
@@ -56,6 +71,11 @@ def render_chart(
     for col in (x, y):
         if col not in rows[0]:
             raise ValueError("ไม่มีคอลัมน์ %r ในผลลัพธ์ มีแต่ %s" % (col, ", ".join(rows[0])))
+
+    try:
+        plt, _ = _mpl()
+    except ImportError:
+        return {"image_path": None, "warnings": [NO_MPL]}
 
     warnings: list[str] = []
     font = _thai_font()
@@ -103,9 +123,6 @@ def render_chart(
 if __name__ == "__main__":
     demo = [{"province": "กรุงเทพมหานคร", "count": 798},
             {"province": "นนทบุรี", "count": 172},
-            {"province": "สมุทรปราการ", "count": 125},
-            {"province": "ปทุมธานี", "count": 118},
-            {"province": "ชลบุรี", "count": 93}]
+            {"province": "สมุทรปราการ", "count": 125}]
     print("ฟอนต์ไทยที่เจอ:", _thai_font() or "ไม่มี")
-    print(render_chart(demo, "bar", "province", "count",
-                       "5 จังหวัดที่ร้องเรียนมากที่สุด ปี 2564"))
+    print(render_chart(demo, "bar", "province", "count", "ทดสอบ"))

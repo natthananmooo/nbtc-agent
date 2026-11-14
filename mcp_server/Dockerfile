@@ -23,6 +23,7 @@ ENV HF_HUB_OFFLINE=1
 
 COPY tools/ ./tools/
 COPY mcp_server/ ./mcp_server/
+COPY tests/ ./tests/
 COPY aliases.yaml ./aliases.yaml
 
 # ฐานข้อมูลไม่ได้ copy เข้า image แต่ mount เข้ามาแบบอ่านอย่างเดียวตอนรัน

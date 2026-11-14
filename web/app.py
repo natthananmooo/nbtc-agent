@@ -36,6 +36,14 @@ CHART_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/charts", StaticFiles(directory=str(CHART_DIR)), name="charts")
 
 
+@app.on_event("startup")
+def _startup_banner():
+    """พิมพ์สถานะตั้งแต่ตอนเริ่ม จะได้เช็กด้วย docker compose logs web ได้"""
+    print("[start] Langfuse: %s" % ("เปิดใช้งาน บันทึกทุกคำถาม"
+          if tracer.enabled else "ยังไม่ได้ใส่คีย์ จะไม่บันทึก"), flush=True)
+    print("[start] MCP_URL=%s  MODEL=%s" % (agent.MCP_URL, agent.MODEL), flush=True)
+
+
 class Ask(BaseModel):
     question: str
     # ไอดีบทสนทนา หน้าเว็บส่งกลับมาเพื่อให้ agent จำคำถามก่อนหน้าได้

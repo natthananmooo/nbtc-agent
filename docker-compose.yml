@@ -26,6 +26,7 @@ services:
       - .env
     environment:
       MCP_URL: http://mcp:8000/mcp
+      CHART_DIR: /charts
     volumes:
       # ให้เห็นกราฟที่ mcp วาดไว้
       - ./charts:/charts

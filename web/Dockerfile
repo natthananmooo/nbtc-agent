@@ -11,6 +11,8 @@ COPY agent.py observability.py aliases.yaml ./
 
 # คุยกับ MCP Server ด้วยชื่อ service ในเครือข่ายของ compose
 ENV MCP_URL=http://mcp:8000/mcp
+# โฟลเดอร์เดียวกับที่ mcp เขียนกราฟและหน้าสรุปลงไป ต้องตรงกัน ไม่งั้นเปิดไฟล์ไม่เจอ
+ENV CHART_DIR=/charts
 ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8080

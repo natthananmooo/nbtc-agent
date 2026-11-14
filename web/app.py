@@ -19,6 +19,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import agent
@@ -26,6 +27,12 @@ from observability import tracer
 
 app = FastAPI(title="NBTC Complaint Insight Agent")
 PAGE = (Path(__file__).resolve().parent / "index.html").read_text(encoding="utf-8")
+
+# กราฟที่ mcp วาดไว้ถูก mount มาที่โฟลเดอร์เดียวกัน เสิร์ฟให้หน้าเว็บดูได้
+CHART_DIR = Path(os.environ.get("CHART_DIR",
+                                Path(__file__).resolve().parent.parent / "charts"))
+CHART_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/charts", StaticFiles(directory=str(CHART_DIR)), name="charts")
 
 
 class Ask(BaseModel):
@@ -77,7 +84,10 @@ def _label(step: dict) -> dict:
 
     elif step["tool"] == "render_chart":
         out["how"] = "วาดกราฟ"
-        out["image_path"] = body.get("image_path")
+        path = body.get("image_path")
+        out["image_path"] = path
+        # path ที่ได้เป็นพาธภายใน container แปลงเป็น URL ที่เบราว์เซอร์เปิดได้
+        out["image_url"] = ("/charts/" + Path(path).name) if path else None
         out["warnings"] = body.get("warnings", [])
 
     return out

@@ -123,7 +123,11 @@ function stepCard(s, i) {
       body += '<ul>' + s.findings.map(f => '<li>' + esc(f) + '</li>').join('') + '</ul>';
     (s.caveats || []).forEach(w => body += '<div class="warn-box">' + esc(w) + '</div>');
   } else if (s.tool === 'render_chart') {
-    body += '<div class="label">' + esc(s.image_path || '') + '</div>';
+    if (s.image_url) {
+      body += '<img src="' + esc(s.image_url) + '" alt="กราฟ" ' +
+              'style="width:100%;border:1px solid var(--line);border-radius:8px;margin-top:8px">';
+    }
+    (s.warnings || []).forEach(w => body += '<div class="warn-box">' + esc(w) + '</div>');
   }
 
   return '<div class="card"><div class="step-head"><span class="num">' + (i + 1) +

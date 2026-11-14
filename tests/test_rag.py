@@ -51,3 +51,25 @@ o = graph.explore_relations("บริษัท ทรู มูฟ เอช �
 for d in o["related"]["problem_group"]:
     print("  %-44s rows=%-6d share=%5.1f%%  lift=%.2f" % (
         d["value"][:44], d["rows_all_years"], d["share_pct"], d["lift"]))
+
+head("5. ตรวจเกณฑ์ที่ตั้งใหม่กับเคสที่ต้องผ่านและต้องไม่ผ่าน")
+os.environ["RAG_MODE"] = "rerank"
+expect = [
+    ("เน็ตช้า", "problem_group", "high", "คุณภาพสัญญาณ"),
+    ("โดนคิดเงินเกิน", "problem_group", "high", "การคิดค่าบริการผิดพลาด"),
+    ("เน็ตบ้าน", "service_type", "high", "อินเทอร์เน็ต"),
+    ("ยกเลิกไม่ได้สักที", "problem_group", "ambiguous", None),
+    ("บริการ", "problem_group", "ambiguous", None),
+    ("ดาวอังคาร", "problem_group", "none", None),
+    ("เน็ตช้า", None, "ambiguous", None),
+]
+ok = 0
+for phrase, field, want_conf, want_val in expect:
+    o = resolve_filter_values(phrase, field)
+    got = o["confidence"]
+    top = o["candidates"][0]["value"] if o["candidates"] else None
+    good = got == want_conf and (want_val is None or top == want_val)
+    ok += good
+    print("  %-4s %-22s field=%-14s ได้ %-10s %s" % (
+        "ผ่าน" if good else "ไม่ผ่าน", phrase, field, got, (top or "-")[:34]))
+print("\nผ่าน %d จาก %d" % (ok, len(expect)))

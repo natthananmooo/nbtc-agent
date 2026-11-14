@@ -108,7 +108,7 @@ def _label(step: dict) -> dict:
         out["how"] = ("ไฟล์ alias" if body.get("alias_group")
                       else "เป็นตัวเลข ไม่ต้องแปลง" if conf == "not_needed"
                       else "ไม่พบค่านี้ในฐานข้อมูล" if conf == "none"
-                      else "เทียบความหมายด้วยเวกเตอร์" if method == "vector"
+                      else "ให้คะแนนความเกี่ยวข้องด้วย cross-encoder" if method == "rerank"
                       else "ตัดคำไทยแล้วนับคำซ้ำ BM25" if method == "bm25"
                       else "เทียบข้อความ")
         out["method"] = method

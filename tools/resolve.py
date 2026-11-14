@@ -242,8 +242,29 @@ def resolve_filter_values(user_phrase: str, field: str | None = None) -> dict:
 
     top_field = scored[0][1]
     same = [t for t in scored if t[1] == top_field][:MAX_CANDIDATES]
-    cands = [{"value": v, "score": round(s, 3), "rows_all_years": n, "evidence": k}
-             for s, _, v, n, k in same]
+    cands = [{"value": v, "field": f, "score": round(s, 3),
+              "rows_all_years": n, "evidence": k}
+             for s, f, v, n, k in same]
+
+    # คำเดียวอาจตรงได้ทั้งประเภทบริการและกลุ่มปัญหา เช่น เน็ตช้า
+    # ตรงกับ service_type อินเทอร์เน็ต และ problem_group คุณภาพสัญญาณ พอ ๆ กัน
+    # ถ้าเลือกข้างเอง จะได้ตัวเลขที่ถูก syntax แต่ตอบคนละคำถามกับที่ผู้ใช้ถาม
+    # คะแนนของ cross-encoder เทียบข้ามคอลัมน์ได้ เพราะมาจากโมเดลเดียวกัน
+    cross_field = False
+    if vector_used and field is None:
+        best = {}
+        for sc, f, v, n, k in scored:
+            if f not in best or sc > best[f][0]:
+                best[f] = (sc, v, n, k)
+        rivals = [f for f, (sc, *_) in best.items()
+                  if f != top_field and sc >= rerank.RERANK_FLOOR
+                  and scored[0][0] - sc < rerank.RERANK_MARGIN]
+        if rivals:
+            cross_field = True
+            picked = [top_field] + rivals
+            cands = [{"value": best[f][1], "field": f, "score": round(best[f][0], 3),
+                      "rows_all_years": best[f][2], "evidence": best[f][3]}
+                     for f in picked][:MAX_CANDIDATES]
 
     # --- 3. ตัดสิน confidence ---
     if bm25_used:
@@ -269,6 +290,13 @@ def resolve_filter_values(user_phrase: str, field: str | None = None) -> dict:
             conf, note = "ambiguous", (
                 "มีคำซ้ำกันหลายค่าและคะแนนสูสี ห้ามเดา "
                 "ให้ถามผู้ใช้ว่าหมายถึงอันไหน พร้อมบอกจำนวนเรื่องของแต่ละตัวเลือก")
+    elif cross_field:
+        conf, note = "ambiguous", (
+            "คำนี้ตรงได้หลายคอลัมน์พอ ๆ กัน ห้ามเลือกเอง "
+            "ให้ถามผู้ใช้ว่าหมายถึงด้านไหน โดยอธิบายความต่างให้ชัด "
+            "ดูฟิลด์ field ในแต่ละตัวเลือกว่ามาจากคอลัมน์อะไร "
+            "เช่นกรองที่ประเภทบริการจะได้ทุกเรื่องของบริการนั้น "
+            "ส่วนกรองที่กลุ่มปัญหาจะได้เฉพาะเรื่องที่เป็นปัญหานั้นจริง ๆ")
     elif vector_used:
         # จับคู่ด้วยความหมาย ไม่มีหลักฐานตัวอักษรรองรับ จึงต้องเข้มกว่าปกติ
         # ถ้าไม่ขาดลอยจริง ให้ถามกลับ ดีกว่าเดาแล้วได้ SQL ที่ถูก syntax แต่ผิดความหมาย

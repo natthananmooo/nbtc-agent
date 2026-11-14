@@ -28,7 +28,7 @@ COPY aliases.yaml ./aliases.yaml
 # ฐานข้อมูลไม่ได้ copy เข้า image แต่ mount เข้ามาแบบอ่านอย่างเดียวตอนรัน
 ENV COMPLAINTS_DB=/data/complaints.db
 ENV CHART_DIR=/charts
-# เปิดปิดชั้นเวกเตอร์ด้วยตัวแปรนี้ เพื่อวัดผลเทียบกันว่ามี RAG แล้วดีขึ้นจริงไหม
+# โหมดการค้นค่า off / bm25 / vector ใช้วัดผลเทียบกันสามขา
 ENV RAG_MODE=off
 ENV MCP_TRANSPORT=streamable-http
 ENV MCP_HOST=0.0.0.0

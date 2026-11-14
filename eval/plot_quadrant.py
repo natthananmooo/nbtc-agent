@@ -23,6 +23,8 @@ from tools.chart import _thai_font       # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 BLUE, ORANGE = "#2a78d6", "#eb6834"
+# ขาที่สาม ใช้การตัดคำไทยอย่างเดียว ยังไม่ถึงชั้นเวกเตอร์
+GREEN = "#1baf7a"
 
 
 def _load(labels: list[str] | None) -> list[dict]:
@@ -36,12 +38,15 @@ def _load(labels: list[str] | None) -> list[dict]:
 
 
 def _color(label: str, index: int) -> str:
+    """สีฟ้าคือมี RAG สีส้มคือไม่มี ส่วนสีเขียวคือขากลางที่ใช้ BM25 อย่างเดียว"""
     low = label.lower()
+    if "bm25" in low:
+        return GREEN
     if "ไม่มี" in label or "no" in low or "baseline" in low:
         return ORANGE
     if "rag" in low or "มี" in label:
         return BLUE
-    return [BLUE, ORANGE][index % 2]
+    return [BLUE, ORANGE, GREEN][index % 3]
 
 
 def plot(runs: list[dict], out: Path) -> Path:

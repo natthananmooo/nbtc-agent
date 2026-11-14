@@ -8,7 +8,7 @@
 import os
 import sys
 
-from tools import embed, graph
+from tools import bm25, embed, graph
 from tools.resolve import resolve_filter_values
 
 
@@ -16,17 +16,25 @@ def head(t):
     print("\n" + "=" * 70 + "\n" + t + "\n" + "=" * 70)
 
 
-head("1. โมเดล embedding จับความหมายภาษาไทยได้จริงไหม")
+head("1. ตัดคำไทยแล้วนับคำซ้ำ BM25")
+if not bm25.available():
+    print("ใช้ BM25 ไม่ได้:", bm25.load_error())
+else:
+    bm25.selftest()
+
+head("2. โมเดล embedding จับความหมายภาษาไทยได้จริงไหม")
 if not embed.available():
     print("โหลดโมเดลไม่สำเร็จ:", embed.load_error())
     sys.exit(1)
 embed.selftest()
 
-head("2. resolve ตอนปิดชั้นเวกเตอร์ เทียบกับตอนเปิด")
+head("3. resolve ทั้งสามโหมด")
 cases = [("เน็ตช้า", "problem_group"), ("โดนคิดเงินเกิน", "problem_group"),
-         ("ยกเลิกไม่ได้สักที", "problem_group"), ("มือถือ", "service_type"),
-         ("ดาวอังคาร", "province"), ("AIS", None), ("ทรู", None)]
-for mode in ("off", "on"):
+         ("สัญญาณไม่ดี", "problem_group"), ("ข้อความโฆษณากวน", "problem_group"),
+         ("เสาส่งสัญญาณอันตรายต่อสุขภาพ", "problem_group"), ("บริการ", "problem_group"),
+         ("มือถือ", "service_type"), ("ดาวอังคาร", "province"),
+         ("AIS", None), ("ทรู", None)]
+for mode in ("off", "bm25", "vector"):
     os.environ["RAG_MODE"] = mode
     print("\nRAG_MODE=%s" % mode)
     for phrase, field in cases:
@@ -34,7 +42,7 @@ for mode in ("off", "on"):
         top = o["candidates"][0]["value"][:40] if o["candidates"] else "-"
         print("  %-18s %-10s %-8s %s" % (phrase, o["confidence"], o.get("method"), top))
 
-head("3. กราฟความสัมพันธ์")
+head("4. กราฟความสัมพันธ์")
 g = graph.graph()
 print("node %d  edge %d" % (g.number_of_nodes(), g.number_of_edges()))
 o = graph.explore_relations("บริษัท ทรู มูฟ เอช ยูนิเวอร์แซล คอมมิวนิเคชั่น จำกัด",

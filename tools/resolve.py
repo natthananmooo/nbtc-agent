@@ -22,7 +22,7 @@ from pathlib import Path
 
 import yaml
 
-from . import db, embed
+from . import bm25, db, embed
 
 ALIAS_FILE = Path(__file__).resolve().parent.parent / "aliases.yaml"
 
@@ -51,12 +51,21 @@ VEC_GAP = float(os.environ.get("VEC_GAP", "0.03"))       # ต้องนำอ
 VEC_TOP = 3
 
 
-def _rag_on() -> bool:
-    """เปิดปิดชั้นเวกเตอร์ด้วย env เพื่อให้วัดผลเทียบกันได้ว่ามี RAG แล้วดีขึ้นจริงไหม
+def _mode() -> str:
+    """โหมดการค้นค่า อ่านจาก env ทุกครั้งที่เรียก ไม่ใช่ตอน import
 
-    อ่านทุกครั้งที่เรียก ไม่ใช่ตอน import จะได้เปลี่ยนค่าแล้วรีสตาร์ตอย่างเดียวก็พอ
+    off     เทียบตัวอักษรอย่างเดียว เป็นฐานสำหรับเปรียบเทียบ
+    bm25    เพิ่มการตัดคำไทยแล้วนับคำซ้ำ
+    vector  เพิ่มการเทียบความหมายด้วยเวกเตอร์ต่อจาก bm25
+
+    แยกสามระดับเพื่อให้วัดได้ว่าโมเดลเวกเตอร์ที่หนักกว่ามาก คุ้มกับที่จ่ายไปไหม
     """
-    return os.environ.get("RAG_MODE", "off").strip().lower() in ("1", "on", "true", "yes")
+    m = os.environ.get("RAG_MODE", "off").strip().lower()
+    if m in ("1", "on", "true", "yes", "vector"):
+        return "vector"
+    if m in ("bm25", "lexical+bm25"):
+        return "bm25"
+    return "off"
 
 
 def _norm(s: str) -> str:
@@ -159,20 +168,40 @@ def resolve_filter_values(user_phrase: str, field: str | None = None) -> dict:
     # ถ้าคำที่พิมพ์ตรงตัวหรือเป็นคำย่อยของค่าจริงอยู่แล้ว วิธีเดิมแม่นและอธิบายได้
     # ชั้นเวกเตอร์มีไว้สำหรับกรณีที่ตัวอักษรไม่ซ้ำกันเลย เช่น เน็ตช้า กับ คุณภาพสัญญาณ
     lexical_solid = bool(scored) and scored[0][4] in ("exact", "substring")
-    vector_used = False
-    if _rag_on() and not lexical_solid and embed.available():
+    mode = _mode()
+    used = "lexical"
+
+    # ขั้นที่หนึ่ง ตัดคำไทยแล้วนับคำซ้ำ
+    # แก้จุดอ่อนที่ภาษาไทยไม่เว้นวรรค เช่น สัญญาณไม่ดี กับ คุณภาพสัญญาณ
+    if mode in ("bm25", "vector") and not lexical_solid and bm25.available():
+        hits = []
+        for f in fields:
+            pairs = _values(f)
+            counts = dict(pairs)
+            for h in bm25.search(f, [v for v, _ in pairs], user_phrase, top_k=VEC_TOP) or []:
+                if h["score"] >= bm25.BM25_FLOOR:
+                    hits.append((h["score"], f, h["value"], counts.get(h["value"], 0), "bm25"))
+        if hits:
+            hits.sort(key=lambda t: (-t[0], -t[3]))
+            scored = hits
+            used = "bm25"
+
+    # ขั้นที่สอง เทียบความหมาย ใช้ต่อเมื่อไม่มีคำไหนซ้ำกันเลย
+    if mode == "vector" and used == "lexical" and not lexical_solid and embed.available():
         vec = []
         for f in fields:
             pairs = _values(f)
-            hits = embed.search(f, [v for v, _ in pairs], user_phrase, top_k=VEC_TOP) or []
             counts = dict(pairs)
-            for h in hits:
+            for h in embed.search(f, [v for v, _ in pairs], user_phrase, top_k=VEC_TOP) or []:
                 if h["score"] >= VEC_FLOOR:
                     vec.append((h["score"], f, h["value"], counts.get(h["value"], 0), "vector"))
         if vec:
             vec.sort(key=lambda t: (-t[0], -t[3]))
             scored = vec
-            vector_used = True
+            used = "vector"
+
+    vector_used = used == "vector"
+    bm25_used = used == "bm25"
 
     if not scored:
         # ไม่เจอค่าที่ตรง แต่ต้องช่วยให้ถามกลับได้อย่างมีข้อมูล
@@ -192,7 +221,7 @@ def resolve_filter_values(user_phrase: str, field: str | None = None) -> dict:
             "use_in_filters": None,
             "confidence": "none",
             "alias_group": None,
-            "method": "vector" if vector_used else "lexical",
+            "method": used,
             "field_values": menu,
             "note": ("ไม่มีค่าไหนในคอลัมน์ %s ที่ตรงกับคำนี้ ห้ามเดาเด็ดขาด "
                      "ให้ถามผู้ใช้โดยเสนอเฉพาะค่าจาก field_values ข้างล่างนี้เท่านั้น "
@@ -209,7 +238,24 @@ def resolve_filter_values(user_phrase: str, field: str | None = None) -> dict:
              for s, _, v, n, k in same]
 
     # --- 3. ตัดสิน confidence ---
-    if vector_used:
+    if bm25_used:
+        # มีคำซ้ำกันจริงจึงเชื่อได้ระดับหนึ่ง แต่ถ้าอันดับหนึ่งกับสองสูสี ให้ถามกลับ
+        # ที่วัดมา คู่ที่อันดับหนึ่งผิดมักห่างกันแค่ 1.2 ถึง 1.5 เท่า
+        s1 = cands[0]["score"]
+        s2 = cands[1]["score"] if len(cands) > 1 else 0.0
+        # ไม่มีคู่แข่งเลย แปลว่ามีค่าเดียวที่มีคำซ้ำ เชื่อได้ที่เกณฑ์พื้น
+        # มีคู่แข่ง ต้องนำให้ขาดจริง ไม่งั้นถามกลับ
+        alone = s2 <= 0 and s1 >= bm25.BM25_FLOOR
+        if alone or (s1 >= bm25.BM25_HIGH and s2 > 0 and s1 / s2 >= bm25.BM25_RATIO):
+            conf, note = "high", (
+                "จับคู่ได้จากคำที่ซ้ำกันหลังตัดคำไทย ใช้ค่านี้ได้ "
+                "ต้องบอกผู้ใช้ว่าตีความคำของเขาเป็นค่าอะไรในฐานข้อมูล "
+                "ตัวเลข rows คือยอดรวมทุกปี ไม่ใช่คำตอบ ต้องเรียก query_complaints ต่อเสมอ")
+        else:
+            conf, note = "ambiguous", (
+                "มีคำซ้ำกันหลายค่าและคะแนนสูสี ห้ามเดา "
+                "ให้ถามผู้ใช้ว่าหมายถึงอันไหน พร้อมบอกจำนวนเรื่องของแต่ละตัวเลือก")
+    elif vector_used:
         # จับคู่ด้วยความหมาย ไม่มีหลักฐานตัวอักษรรองรับ จึงต้องเข้มกว่าปกติ
         # ถ้าไม่ขาดลอยจริง ให้ถามกลับ ดีกว่าเดาแล้วได้ SQL ที่ถูก syntax แต่ผิดความหมาย
         clear = cands[0]["score"] >= VEC_HIGH and (
@@ -243,7 +289,7 @@ def resolve_filter_values(user_phrase: str, field: str | None = None) -> dict:
         "use_in_filters": ({top_field: [cands[0]["value"]]} if conf == "high" else None),
         "confidence": conf,
         "alias_group": None,
-        "method": "vector" if vector_used else "lexical",
+        "method": used,
         "note": note,
     }
 

@@ -1,0 +1,199 @@
+"""
+agent.py - Agent Core
+
+ส่วนที่ตัดสินใจ อยู่ที่นี่ที่เดียว
+  - จะเรียก Tool ตัวไหน เมื่อไร และกี่ครั้ง
+  - เมื่อค่ากำกวม จะถามกลับแทนการเดา
+
+สองการเชื่อมต่อที่ไม่เกี่ยวกัน
+  agent -> OpenRouter  ผ่าน HTTPS แบบ OpenAI function calling
+  agent -> MCP Server  ผ่านโปรโตคอล MCP
+OpenRouter ไม่รู้จัก MCP หน้าที่ของ MCP Client คือแปลง schema ให้ OpenRouter เข้าใจ
+
+วิธีรัน
+    docker compose up -d --build        เปิด MCP Server ก่อน
+    python agent.py                     โหมดถาม-ตอบ
+    python agent.py "ปี 2564 จังหวัดไหนร้องเรียนมากสุด 5 อันดับ"
+    python agent.py --dry               ดู system prompt กับ tool โดยไม่เรียก LLM
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+import sys
+from contextlib import asynccontextmanager
+
+from dotenv import load_dotenv
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+from mcp.client.streamable_http import streamable_http_client
+
+load_dotenv()
+
+MCP_URL = os.environ.get("MCP_URL", "http://127.0.0.1:8000/mcp")
+MODEL = os.environ.get("OPENROUTER_MODEL", "qwen/qwen-2.5-72b-instruct")
+MAX_STEPS = int(os.environ.get("AGENT_MAX_STEPS", "8"))
+
+SYSTEM_PROMPT = """คุณเป็นผู้ช่วยวิเคราะห์สถิติเรื่องร้องเรียนในกิจการโทรคมนาคมของ กสทช.
+ตอบเป็นภาษาไทย กระชับ และอ้างอิงตัวเลขจากฐานข้อมูลเท่านั้น
+
+กฎการตัดสินใจ ทำตามลำดับนี้เสมอ
+
+1. ถ้าคำถามอ้างถึงผู้ให้บริการ ประเภทบริการ กลุ่มปัญหา หรือพื้นที่
+   ให้เรียก resolve_filter_values ก่อน อย่าเดาค่าเอง
+   คำที่คนพูดมักไม่ตรงกับค่าที่เก็บจริง เช่น ผู้ใช้พิมพ์ AIS
+   แต่ฐานข้อมูลเก็บว่า บริษัท แอดวานซ์ ไวร์เลส เน็ทเวอร์ค จำกัด
+
+2. ดูค่า confidence ที่ได้
+   high      ใช้ค่านั้น และบอกผู้ใช้ด้วยว่าใช้ค่าอะไร
+             ถ้ามี alias_group ต้องบอกว่ารวมบริษัทใดเข้าด้วยกันบ้าง
+   ambiguous หยุดทันที ห้ามเรียก query_complaints
+             ให้ถามกลับว่าผู้ใช้หมายถึงตัวเลือกไหน พร้อมบอกจำนวนเรื่องของแต่ละตัวเลือก
+   none      ห้ามเดา ให้ถามผู้ใช้ใหม่ หรือบอกว่าไม่มีข้อมูลนี้ในฐานข้อมูล
+
+3. ถ้าคำถามกำกวมในเรื่องอื่น เช่น ไม่ระบุช่วงเวลา หรือไม่ระบุว่าจะดูรายปีหรือรายเดือน
+   ให้ถามกลับก่อน อย่าเลือกให้เอง
+
+4. เมื่อค่าชัดแล้ว เรียก query_complaints
+   ห้ามส่ง SQL เข้าไป ส่งเฉพาะพารามิเตอร์
+   ค่าที่ใส่ใน filters ต้องเป็นค่าที่ได้จาก resolve_filter_values เท่านั้น
+
+5. ถ้าต้องสรุปแนวโน้มหรือเปรียบเทียบ ให้เรียก analyze_results
+   ส่ง warnings ที่ได้จาก query_complaints เข้าไปด้วย
+   อย่าคิดเลขเอง ให้ใช้ตัวเลขที่ tool คำนวณมา
+
+6. เรียก render_chart เฉพาะเมื่อผู้ใช้ขอกราฟ
+
+กฎการตอบ
+
+- ทุกตัวเลขในคำตอบต้องมาจากผลลัพธ์ของ tool ห้ามประมาณหรือเติมเอง
+- ต้องแจ้ง warnings ทุกข้อที่ tool คืนมา โดยเฉพาะเรื่องข้อมูลที่ถูกตัดออก
+- ปิดท้ายคำตอบด้วยบรรทัด "ที่มา: " แล้วตามด้วย sql_used ที่ใช้จริง
+- ถ้าข้อมูลไม่พอจะตอบ ให้บอกตรง ๆ ว่าตอบไม่ได้ ดีกว่าเดา
+
+โครงสร้างข้อมูลและค่าที่มีอยู่จริง
+{schema}
+"""
+
+
+def mcp_tools_to_openai(tools) -> list[dict]:
+    """แปลง schema ที่ MCP Server ประกาศ ให้อยู่ในรูปที่ OpenRouter เข้าใจ"""
+    return [{
+        "type": "function",
+        "function": {
+            "name": t.name,
+            "description": (t.description or "").strip(),
+            "parameters": t.input_schema,
+        },
+    } for t in tools]
+
+
+@asynccontextmanager
+async def open_session():
+    """ต่อ MCP Server ผ่าน HTTP ถ้าไม่ได้ ค่อยเปิดเป็น subprocess แบบ stdio"""
+    try:
+        async with streamable_http_client(MCP_URL) as (read, write, _):
+            async with ClientSession(read, write) as s:
+                await s.initialize()
+                print("[ต่อ MCP Server ผ่าน HTTP ที่ %s]" % MCP_URL, file=sys.stderr)
+                yield s
+                return
+    except Exception as e:
+        print("[ต่อผ่าน HTTP ไม่ได้ (%s) ลองเปิดแบบ stdio แทน]" % type(e).__name__,
+              file=sys.stderr)
+
+    env = dict(os.environ, MCP_TRANSPORT="stdio", PYTHONPATH=os.getcwd())
+    params = StdioServerParameters(
+        command=sys.executable, args=["-m", "mcp_server.server"], env=env)
+    async with stdio_client(params) as (read, write):
+        async with ClientSession(read, write) as s:
+            await s.initialize()
+            print("[เปิด MCP Server แบบ stdio]", file=sys.stderr)
+            yield s
+
+
+async def build_context(session) -> tuple[str, list[dict]]:
+    """ดึง tool กับ resource จาก MCP Server มาประกอบเป็นบริบทของ agent"""
+    tools = (await session.list_tools()).tools
+    res = await session.read_resource("schema://values")
+    schema = res.contents[0].text
+    return SYSTEM_PROMPT.format(schema=schema), mcp_tools_to_openai(tools)
+
+
+async def run_turn(session, client, messages: list[dict], oa_tools: list[dict]) -> str:
+    """วนรอบจนกว่าโมเดลจะตอบเป็นข้อความ แทนที่จะขอเรียก tool เพิ่ม"""
+    for step in range(MAX_STEPS):
+        resp = client.chat.completions.create(
+            model=MODEL, messages=messages, tools=oa_tools, tool_choice="auto")
+        msg = resp.choices[0].message
+        messages.append(msg.model_dump(exclude_none=True))
+
+        if not msg.tool_calls:
+            return msg.content or "(โมเดลไม่ได้ตอบอะไร)"
+
+        for call in msg.tool_calls:
+            name = call.function.name
+            try:
+                args = json.loads(call.function.arguments or "{}")
+            except json.JSONDecodeError:
+                args = {}
+            print("  [เรียก %s %s]" % (name, json.dumps(args, ensure_ascii=False)[:160]),
+                  file=sys.stderr)
+            result = await session.call_tool(name, args)
+            text = "\n".join(c.text for c in result.content if hasattr(c, "text"))
+            if result.is_error:
+                text = "tool ทำงานไม่สำเร็จ: " + text
+            messages.append({"role": "tool", "tool_call_id": call.id, "content": text})
+
+    return "หยุดเพราะเรียก tool เกิน %d รอบแล้วยังไม่ได้คำตอบ" % MAX_STEPS
+
+
+async def main():
+    args = [a for a in sys.argv[1:]]
+    dry = "--dry" in args
+    args = [a for a in args if a != "--dry"]
+
+    async with open_session() as session:
+        system, oa_tools = await build_context(session)
+
+        if dry:
+            print(system)
+            print("\n=== tool ที่ MCP Server ประกาศ ===")
+            for t in oa_tools:
+                print(" -", t["function"]["name"])
+            return
+
+        key = os.environ.get("OPENROUTER_API_KEY")
+        if not key:
+            print("ยังไม่ได้ตั้ง OPENROUTER_API_KEY ใน .env\n"
+                  "คัดลอก .env.example เป็น .env แล้วใส่คีย์ก่อน\n"
+                  "หรือรัน python agent.py --dry เพื่อดูบริบทโดยไม่เรียกโมเดล")
+            return
+
+        from openai import OpenAI
+        client = OpenAI(api_key=key, base_url="https://openrouter.ai/api/v1")
+
+        messages: list[dict] = [{"role": "system", "content": system}]
+        questions = [" ".join(args)] if args else None
+
+        while True:
+            if questions:
+                q = questions.pop(0)
+                print("\nคำถาม:", q)
+            else:
+                try:
+                    q = input("\nคำถาม (เว้นว่างเพื่อออก): ").strip()
+                except (EOFError, KeyboardInterrupt):
+                    break
+                if not q:
+                    break
+            messages.append({"role": "user", "content": q})
+            print(await run_turn(session, client, messages, oa_tools))
+            if args and not questions:
+                break
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

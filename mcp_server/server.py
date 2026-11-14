@@ -19,6 +19,8 @@ from tools.analyze import analyze_results as _analyze
 from tools.chart import render_chart as _chart
 from tools.query import query_complaints as _query
 from tools.resolve import resolve_filter_values as _resolve
+from tools.resolve import values_for_prompt as _values
+from tools import db as _db
 
 mcp = MCPServer(
     "nbtc-complaints",
@@ -122,6 +124,23 @@ def render_chart(
         filename: ตั้งชื่อไฟล์เองได้ ถ้าไม่ระบุจะตั้งให้
     """
     return _chart(rows, chart_type, x, y, title, filename)
+
+
+# ---------------------------------------------------------------- resource
+# รายการค่าที่มีจริงในฐานข้อมูล ส่งให้ agent เอาไปใส่ system prompt
+# เป็น resource ไม่ใช่ tool เพราะเป็นข้อมูลบริบท ไม่ใช่การกระทำ
+# agent จึงไม่ต้องเข้าถึงไฟล์ฐานข้อมูลเองเลย ซึ่งเป็นจุดสำคัญด้านความปลอดภัย
+@mcp.resource("schema://values", mime_type="text/plain")
+def schema_values() -> str:
+    """รายการค่าไม่ซ้ำของแต่ละคอลัมน์ และคำอธิบายโครงสร้างตาราง"""
+    lines = ["ตาราง complaints มี %d แถว" % _db.total_rows(), "", "คอลัมน์ที่กรองและจัดกลุ่มได้"]
+    for col, desc in _db.DIMENSIONS.items():
+        lines.append("  %-14s %s" % (col, desc))
+    lines += ["", "ค่าที่วัดได้ (metric)"]
+    for m, desc in _db.MEASURES.items():
+        lines.append("  %-18s %s" % (m, desc))
+    lines += ["", "ค่าที่มีอยู่จริงในแต่ละคอลัมน์", _values()]
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":

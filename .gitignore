@@ -9,7 +9,8 @@ data/*.csv
 data/*.json
 
 # ผลลัพธ์ระหว่างรัน
-charts/
+charts/*
+!charts/.gitkeep
 *.png
 *.log
 

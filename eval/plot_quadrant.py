@@ -37,12 +37,25 @@ def _load(labels: list[str] | None) -> list[dict]:
     return runs
 
 
+# ชื่อรอบใช้อังกฤษตอนรัน เพราะพิมพ์ไทยใน terminal แล้วพังบ่อย
+# แต่ในกราฟแสดงเป็นไทยให้อ่านง่าย
+DISPLAY = {
+    "baseline": "ไม่มี RAG (เทียบตัวอักษร)",
+    "bm25": "BM25 (ตัดคำไทย)",
+    "rag-rerank": "มี RAG (cross-encoder)",
+}
+
+
+def _display(label: str) -> str:
+    return DISPLAY.get(label.strip().lower(), label)
+
+
 def _color(label: str, index: int) -> str:
     """สีฟ้าคือมี RAG สีส้มคือไม่มี ส่วนสีเขียวคือขากลางที่ใช้ BM25 อย่างเดียว"""
     low = label.lower()
     if "bm25" in low:
         return GREEN
-    if "ไม่มี" in label or "no" in low or "baseline" in low:
+    if "ไม่มี" in label or "baseline" in low or low.startswith("no"):
         return ORANGE
     if "rag" in low or "มี" in label:
         return BLUE
@@ -72,7 +85,7 @@ def plot(runs: list[dict], out: Path) -> Path:
         mx = sum(r["correctness"] for r in run["results"]) / n
         my = sum(r["faithfulness"] for r in run["results"]) / n
         ax.scatter(xs, ys, s=55, color=c, alpha=0.55, edgecolors="none",
-                   label="%s  (C=%.2f F=%.2f, n=%d)" % (run["label"], mx, my, n))
+                   label="%s  (C=%.2f F=%.2f, n=%d)" % (_display(run["label"]), mx, my, n))
         ax.scatter([mx], [my], s=190, marker="X", color=c,
                    edgecolors="white", linewidths=1.4, zorder=5)
 

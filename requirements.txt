@@ -1,0 +1,4 @@
+# สำหรับ agent ที่รันบนเครื่อง (ไม่ใช่ใน container)
+openai>=1.40
+mcp>=2.3.0
+python-dotenv>=1.0

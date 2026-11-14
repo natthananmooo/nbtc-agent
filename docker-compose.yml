@@ -1,0 +1,14 @@
+services:
+  mcp:
+    build:
+      context: .
+      dockerfile: mcp_server/Dockerfile
+    container_name: nbtc-mcp
+    ports:
+      - "8000:8000"
+    volumes:
+      # ชั้นที่ 4 ของกลไกอ่านอย่างเดียว
+      # :ro ทำให้ kernel ปฏิเสธการเขียน และโปรเซส agent ไม่เห็นไฟล์นี้เลย
+      - ./data/complaints.db:/data/complaints.db:ro
+      - ./charts:/charts
+    restart: unless-stopped

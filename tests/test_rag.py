@@ -29,7 +29,8 @@ if not embed.available():
 embed.selftest()
 
 head("3. resolve ทั้งสามโหมด")
-cases = [("เน็ตช้า", "problem_group"), ("โดนคิดเงินเกิน", "problem_group"),
+cases = [("เน็ตช้า", None), ("เน็ตช้า", "problem_detail"),
+         ("ความเร็วไม่ได้ตามที่โฆษณา", None), ("เน็ตช้า", "problem_group"), ("โดนคิดเงินเกิน", "problem_group"),
          ("สัญญาณไม่ดี", "problem_group"), ("ข้อความโฆษณากวน", "problem_group"),
          ("เสาส่งสัญญาณอันตรายต่อสุขภาพ", "problem_group"), ("บริการ", "problem_group"),
          ("มือถือ", "service_type"), ("ดาวอังคาร", "province"),

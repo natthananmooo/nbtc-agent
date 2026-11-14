@@ -50,6 +50,13 @@ VEC_HIGH = float(os.environ.get("VEC_HIGH", "0.88"))     # สูงกว่า
 VEC_GAP = float(os.environ.get("VEC_GAP", "0.03"))       # ต้องนำอันดับสองเท่านี้
 VEC_TOP = 3
 
+# คอลัมน์ที่ให้ชั้นเวกเตอร์ทำงาน เฉพาะที่ค่าเป็นคำบรรยายซึ่งมีความหมายให้เทียบ
+# ชื่อเฉพาะอย่างจังหวัด อำเภอ และชื่อนิติบุคคล ใช้ไม่ได้
+# วัดแล้วพบว่า "เมืองกรุง" ได้ นครนายก 0.808 แซง กรุงเทพมหานคร 0.807
+# ห่างกัน 0.001 คือสัญญาณรบกวนล้วน ๆ ชื่อพวกนี้ต้องพึ่ง alias กับการเทียบตัวอักษร
+VEC_FIELDS = ("problem_group", "problem_detail", "service_type",
+              "cat_level1", "cat_level2", "channel", "status")
+
 
 def _mode() -> str:
     """โหมดการค้นค่า อ่านจาก env ทุกครั้งที่เรียก ไม่ใช่ตอน import
@@ -189,7 +196,7 @@ def resolve_filter_values(user_phrase: str, field: str | None = None) -> dict:
     # ขั้นที่สอง เทียบความหมาย ใช้ต่อเมื่อไม่มีคำไหนซ้ำกันเลย
     if mode == "vector" and used == "lexical" and not lexical_solid and embed.available():
         vec = []
-        for f in fields:
+        for f in [x for x in fields if x in VEC_FIELDS]:
             pairs = _values(f)
             counts = dict(pairs)
             for h in embed.search(f, [v for v, _ in pairs], user_phrase, top_k=VEC_TOP) or []:

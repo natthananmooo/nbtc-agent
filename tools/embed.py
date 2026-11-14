@@ -114,6 +114,9 @@ def selftest():
         return
 
     cases = [
+        ("problem_detail", "เน็ตช้า"),
+        ("problem_detail", "ความเร็วไม่ได้ตามที่โฆษณา"),
+        ("problem_detail", "สัญญาณไม่ดี"),
         ("problem_group", "เน็ตช้า"),
         ("problem_group", "โดนคิดเงินเกิน"),
         ("problem_group", "ยกเลิกไม่ได้สักที"),

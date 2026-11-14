@@ -4,13 +4,18 @@ services:
     build:
       context: .
       dockerfile: mcp_server/Dockerfile
+      args:
+        # โมเดล embedding ถูกฝังใน image ตอน build ค่านี้จึงต้องส่งตอน build ด้วย
+        # เปลี่ยนใน .env แล้วรัน docker compose up -d --build mcp
+        EMBED_MODEL: ${EMBED_MODEL:-intfloat/multilingual-e5-small}
     container_name: nbtc-mcp
     ports:
       - "8000:8000"
     environment:
-      # off = ใช้การเทียบตัวอักษรอย่างเดียว  on = เปิดชั้นเวกเตอร์
+      # off = เทียบตัวอักษรอย่างเดียว  bm25 = ตัดคำไทย  vector = เพิ่มเวกเตอร์
       # ตั้งค่าใน .env แล้ว docker compose up -d mcp เพื่อสลับตอนวัดผล
       RAG_MODE: ${RAG_MODE:-off}
+      EMBED_MODEL: ${EMBED_MODEL:-intfloat/multilingual-e5-small}
     volumes:
       # ชั้นที่ 4 ของกลไกอ่านอย่างเดียว
       # :ro ทำให้ kernel ปฏิเสธการเขียน และโปรเซสอื่นไม่เห็นไฟล์นี้เลย

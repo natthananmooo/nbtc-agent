@@ -42,7 +42,7 @@ async def main():
             print("\nเรียก query_complaints ด้วยคอลัมน์นอก whitelist")
             r = await session.call_tool("query_complaints",
                                         {"group_by": ["complaint_no; DROP TABLE complaints"]})
-            print("  isError =", r.isError, "|", r.content[0].text[:120].replace("\n", " "))
+            print("  isError =", r.is_error, "|", r.content[0].text[:120].replace("\n", " "))
 
 
 if __name__ == "__main__":

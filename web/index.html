@@ -140,7 +140,16 @@ document.getElementById('f').onsubmit = async e => {
       body: JSON.stringify({question: q})
     });
     const d = await r.json();
-    if (d.error) { out.innerHTML = '<div class="card err">' + esc(d.error) + '</div>'; return; }
+    if (d.error) {
+      out.innerHTML = '<div class="card err"><strong>' + esc(d.error) + '</strong>' +
+        (d.detail ? '<pre style="background:transparent;border:0;padding:8px 0 0;color:inherit">'
+                    + esc(d.detail) + '</pre>' : '') +
+        (d.mcp_url ? '<div class="foot">MCP: ' + esc(d.mcp_url) +
+                     ' · โมเดล ' + esc(d.model) + '</div>' : '') + '</div>' +
+        (d.steps && d.steps.length ? '<div class="label" style="margin:18px 0 8px">ทำไปได้ถึงไหน</div>'
+                                     + d.steps.map(stepCard).join('') : '');
+      return;
+    }
     out.innerHTML =
       '<div class="card"><div class="answer">' + esc(d.answer) + '</div>' +
       '<div class="foot">โมเดล ' + esc(d.model) +

@@ -13,6 +13,8 @@ web/app.py - หน้าเว็บถาม-ตอบ
 from __future__ import annotations
 
 import json
+import os
+import traceback
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -93,20 +95,33 @@ async def health():
 
 @app.post("/api/ask")
 async def ask(req: Ask):
-    import os
+    """ไม่ปล่อยให้ error หลุดเป็น HTTP 500 เพราะหน้าเว็บจะได้ HTML แทน JSON
+    แล้วขึ้นข้อความกำกวมว่า Unexpected token ซึ่งหาสาเหตุไม่ได้"""
     key = os.environ.get("OPENROUTER_API_KEY")
     if not key:
-        return {"error": "ยังไม่ได้ตั้ง OPENROUTER_API_KEY ใน .env"}
+        return {"error": "ยังไม่ได้ตั้ง OPENROUTER_API_KEY",
+                "detail": "service web อ่านคีย์จากไฟล์ .env ผ่าน env_file "
+                          "ตรวจว่าไฟล์มีอยู่และมีบรรทัด OPENROUTER_API_KEY=sk-or-v1-..."}
 
-    from openai import OpenAI
-    client = OpenAI(api_key=key, base_url="https://openrouter.ai/api/v1")
+    steps: list[dict] = []
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=key, base_url="https://openrouter.ai/api/v1")
 
-    async with agent.open_session() as session:
-        system, oa_tools = await agent.build_context(session)
-        messages = [{"role": "system", "content": system},
-                    {"role": "user", "content": req.question}]
-        answer = await agent.run_turn(session, client, messages, oa_tools, req.question)
-        steps = [_label(s) for s in tracer.context]
+        async with agent.open_session() as session:
+            system, oa_tools = await agent.build_context(session)
+            messages = [{"role": "system", "content": system},
+                        {"role": "user", "content": req.question}]
+            answer = await agent.run_turn(session, client, messages, oa_tools, req.question)
+            steps = [_label(s) for s in tracer.context]
+
+    except Exception as e:
+        tb = traceback.format_exc()
+        print(tb, flush=True)          # ให้โผล่ใน docker compose logs web ด้วย
+        return {"error": "%s: %s" % (type(e).__name__, e),
+                "detail": tb[-1500:],
+                "steps": [_label(s) for s in tracer.context],
+                "mcp_url": agent.MCP_URL, "model": agent.MODEL}
 
     return {"question": req.question, "answer": answer,
             "steps": steps, "model": agent.MODEL, "logged": tracer.enabled}

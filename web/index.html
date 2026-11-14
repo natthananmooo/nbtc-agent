@@ -71,7 +71,9 @@ const SAMPLES = [
   "เน็ตช้ามีคนร้องเรียนเยอะไหม",
   "สัดส่วนเรื่องร้องเรียนแยกตามประเภทบริการ",
   "ร้องเรียนเรื่องดาวเทียมมีกี่เรื่อง",
-  "ขอหน้าสรุปภาพรวม แนวโน้มรายปี สัดส่วนประเภทบริการ และจังหวัดที่ร้องเรียนมากสุด"
+  "ขอหน้าสรุปภาพรวม แนวโน้มรายปี สัดส่วนประเภทบริการ และจังหวัดที่ร้องเรียนมากสุด",
+  "ทรู มูฟ เอช มีปัญหาอะไรเป็นพิเศษเมื่อเทียบกับเจ้าอื่น",
+  "มีผู้ให้บริการเจ้าไหนลักษณะปัญหาคล้าย AIS บ้าง"
 ];
 const chips = document.getElementById('chips');
 SAMPLES.forEach(s => {
@@ -114,6 +116,18 @@ function stepCard(s, i) {
       body += '<div class="label">ส่งรายการค่าจริงของคอลัมน์นี้กลับไปให้เลือก</div>';
       body += rowsTable(s.field_values);
     } else if (s.note) body += '<div class="label">' + esc(s.note) + '</div>';
+  } else if (s.tool === 'explore_relations') {
+    if (s.related) {
+      Object.keys(s.related).forEach(function (f) {
+        body += '<div class="label">สิ่งที่พบร่วมกับค่านี้ ในคอลัมน์ ' + esc(f) +
+                ' · lift มากกว่า 1 คือเด่นผิดปกติ</div>';
+        body += rowsTable(s.related[f]);
+      });
+    }
+    if (s.similar && s.similar.length) {
+      body += '<div class="label">ค่าอื่นที่มีรูปแบบปัญหาคล้ายกัน</div>';
+      body += rowsTable(s.similar);
+    }
   } else if (s.tool === 'query_complaints') {
     if (s.sql) body += '<pre>' + esc(s.sql) +
       (s.params && s.params.length ? '\n\nparams: ' + esc(JSON.stringify(s.params)) : '') + '</pre>';

@@ -14,6 +14,7 @@ tools/resolve.py - แปลงคำที่ผู้ใช้พิมพ์ 
 
 from __future__ import annotations
 
+import os
 import re
 from difflib import SequenceMatcher
 from functools import lru_cache
@@ -21,7 +22,7 @@ from pathlib import Path
 
 import yaml
 
-from . import db
+from . import db, embed
 
 ALIAS_FILE = Path(__file__).resolve().parent.parent / "aliases.yaml"
 
@@ -40,6 +41,22 @@ MAX_MENU = 30   # จำนวนค่าสูงสุดที่ส่ง�
 #   fuzzy      คะแนนความคล้ายตัวอักษร ภาษาไทยให้ค่าหลอกได้ง่าย ต้องตั้งสูง
 MIN_FUZZY = 0.78
 MIN_SUBSTRING = 0.70
+
+# เกณฑ์ของชั้นเวกเตอร์ แยกจากเกณฑ์ตัวอักษรเพราะคะแนนคนละสเกลกัน
+# โมเดล e5 ให้คะแนนพื้นฐานสูงอยู่แล้ว ข้อความที่ไม่เกี่ยวกันเลยก็ยังได้ราว 0.75
+# จึงต้องตั้งพื้นสูงและดูระยะห่างระหว่างอันดับหนึ่งกับอันดับสองด้วย
+VEC_FLOOR = float(os.environ.get("VEC_FLOOR", "0.82"))   # ต่ำกว่านี้ถือว่าไม่เกี่ยว
+VEC_HIGH = float(os.environ.get("VEC_HIGH", "0.88"))     # สูงกว่านี้จึงจะใช้เลยได้
+VEC_GAP = float(os.environ.get("VEC_GAP", "0.03"))       # ต้องนำอันดับสองเท่านี้
+VEC_TOP = 3
+
+
+def _rag_on() -> bool:
+    """เปิดปิดชั้นเวกเตอร์ด้วย env เพื่อให้วัดผลเทียบกันได้ว่ามี RAG แล้วดีขึ้นจริงไหม
+
+    อ่านทุกครั้งที่เรียก ไม่ใช่ตอน import จะได้เปลี่ยนค่าแล้วรีสตาร์ตอย่างเดียวก็พอ
+    """
+    return os.environ.get("RAG_MODE", "off").strip().lower() in ("1", "on", "true", "yes")
 
 
 def _norm(s: str) -> str:
@@ -96,6 +113,7 @@ def resolve_filter_values(user_phrase: str, field: str | None = None) -> dict:
             "query": user_phrase, "field": field, "candidates": [],
             "use_in_filters": ready,
             "confidence": "not_needed", "alias_group": None,
+            "method": "numeric",
             "note": "คอลัมน์ %s เป็นตัวเลข ไม่ต้องแปลงอะไร "
                     "ใส่ใน filters ของ query_complaints ได้เลย "
                     "ฐานข้อมูลเก็บปีเป็น พ.ศ. ตามต้นฉบับ" % field,
@@ -118,6 +136,7 @@ def resolve_filter_values(user_phrase: str, field: str | None = None) -> dict:
                 "use_in_filters": {f: [m["value"] for m in members]},
                 "confidence": "high",
                 "alias_group": user_phrase,
+                "method": "alias",
                 "note": "มาจาก aliases.yaml รวม %d รายการ "
                         "ต้องแจ้งผู้ใช้ว่ารวมอะไรเข้าด้วยกันบ้าง "
                         "ตัวเลข rows คือยอดรวมทุกปีของค่านั้นในฐานข้อมูล "
@@ -133,8 +152,27 @@ def resolve_filter_values(user_phrase: str, field: str | None = None) -> dict:
             s, kind = _similarity(phrase, value)
             floor = MIN_FUZZY if kind == "fuzzy" else MIN_SUBSTRING
             if s >= floor:
-                scored.append((s, f, value, rows))
+                scored.append((s, f, value, rows, kind))
     scored.sort(key=lambda t: (-t[0], -t[3]))
+
+    # --- 2.5 ชั้นเวกเตอร์ ใช้เมื่อหลักฐานตัวอักษรไม่หนักแน่น ---
+    # ถ้าคำที่พิมพ์ตรงตัวหรือเป็นคำย่อยของค่าจริงอยู่แล้ว วิธีเดิมแม่นและอธิบายได้
+    # ชั้นเวกเตอร์มีไว้สำหรับกรณีที่ตัวอักษรไม่ซ้ำกันเลย เช่น เน็ตช้า กับ คุณภาพสัญญาณ
+    lexical_solid = bool(scored) and scored[0][4] in ("exact", "substring")
+    vector_used = False
+    if _rag_on() and not lexical_solid and embed.available():
+        vec = []
+        for f in fields:
+            pairs = _values(f)
+            hits = embed.search(f, [v for v, _ in pairs], user_phrase, top_k=VEC_TOP) or []
+            counts = dict(pairs)
+            for h in hits:
+                if h["score"] >= VEC_FLOOR:
+                    vec.append((h["score"], f, h["value"], counts.get(h["value"], 0), "vector"))
+        if vec:
+            vec.sort(key=lambda t: (-t[0], -t[3]))
+            scored = vec
+            vector_used = True
 
     if not scored:
         # ไม่เจอค่าที่ตรง แต่ต้องช่วยให้ถามกลับได้อย่างมีข้อมูล
@@ -154,6 +192,7 @@ def resolve_filter_values(user_phrase: str, field: str | None = None) -> dict:
             "use_in_filters": None,
             "confidence": "none",
             "alias_group": None,
+            "method": "vector" if vector_used else "lexical",
             "field_values": menu,
             "note": ("ไม่มีค่าไหนในคอลัมน์ %s ที่ตรงกับคำนี้ ห้ามเดาเด็ดขาด "
                      "ให้ถามผู้ใช้โดยเสนอเฉพาะค่าจาก field_values ข้างล่างนี้เท่านั้น "
@@ -166,11 +205,26 @@ def resolve_filter_values(user_phrase: str, field: str | None = None) -> dict:
 
     top_field = scored[0][1]
     same = [t for t in scored if t[1] == top_field][:MAX_CANDIDATES]
-    cands = [{"value": v, "score": round(s, 3), "rows_all_years": n}
-             for s, _, v, n in same]
+    cands = [{"value": v, "score": round(s, 3), "rows_all_years": n, "evidence": k}
+             for s, _, v, n, k in same]
 
     # --- 3. ตัดสิน confidence ---
-    if cands[0]["score"] >= 0.85 and (
+    if vector_used:
+        # จับคู่ด้วยความหมาย ไม่มีหลักฐานตัวอักษรรองรับ จึงต้องเข้มกว่าปกติ
+        # ถ้าไม่ขาดลอยจริง ให้ถามกลับ ดีกว่าเดาแล้วได้ SQL ที่ถูก syntax แต่ผิดความหมาย
+        clear = cands[0]["score"] >= VEC_HIGH and (
+            len(cands) == 1 or cands[0]["score"] - cands[1]["score"] >= VEC_GAP
+        )
+        if clear:
+            conf, note = "high", (
+                "ไม่มีคำไหนตรงตัว แต่จับคู่ได้จากความหมาย ใช้ค่านี้ได้ "
+                "ต้องบอกผู้ใช้ให้ชัดว่าตีความคำของเขาเป็นค่าอะไรในฐานข้อมูล "
+                "ตัวเลข rows คือยอดรวมทุกปี ไม่ใช่คำตอบ ต้องเรียก query_complaints ต่อเสมอ")
+        else:
+            conf, note = "ambiguous", (
+                "จับคู่ด้วยความหมายแล้วได้หลายค่าที่ใกล้เคียงกัน ห้ามเดา "
+                "ให้ถามผู้ใช้ว่าหมายถึงอันไหน พร้อมบอกจำนวนเรื่องของแต่ละตัวเลือก")
+    elif cands[0]["score"] >= 0.85 and (
         len(cands) == 1 or cands[0]["score"] - cands[1]["score"] >= 0.15
     ):
         conf, note = "high", ("ตรงชัดเจน ใช้ค่านี้ได้ และบอกผู้ใช้ว่าใช้ค่าอะไร "
@@ -189,6 +243,7 @@ def resolve_filter_values(user_phrase: str, field: str | None = None) -> dict:
         "use_in_filters": ({top_field: [cands[0]["value"]]} if conf == "high" else None),
         "confidence": conf,
         "alias_group": None,
+        "method": "vector" if vector_used else "lexical",
         "note": note,
     }
 

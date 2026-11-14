@@ -7,6 +7,10 @@ services:
     container_name: nbtc-mcp
     ports:
       - "8000:8000"
+    environment:
+      # off = ใช้การเทียบตัวอักษรอย่างเดียว  on = เปิดชั้นเวกเตอร์
+      # ตั้งค่าใน .env แล้ว docker compose up -d mcp เพื่อสลับตอนวัดผล
+      RAG_MODE: ${RAG_MODE:-off}
     volumes:
       # ชั้นที่ 4 ของกลไกอ่านอย่างเดียว
       # :ro ทำให้ kernel ปฏิเสธการเขียน และโปรเซสอื่นไม่เห็นไฟล์นี้เลย

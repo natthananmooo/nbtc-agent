@@ -56,10 +56,14 @@ def _label(step: dict) -> dict:
 
     if step["tool"] == "resolve_filter_values":
         conf = body.get("confidence")
+        method = body.get("method")
+        # บอกให้ชัดว่าหาค่าเจอด้วยวิธีไหน จะได้เห็นว่าชั้นเวกเตอร์ทำงานตอนไหน
         out["how"] = ("ไฟล์ alias" if body.get("alias_group")
                       else "เป็นตัวเลข ไม่ต้องแปลง" if conf == "not_needed"
-                      else "เทียบข้อความ" if conf in ("high", "ambiguous")
-                      else "ไม่พบค่านี้ในฐานข้อมูล")
+                      else "ไม่พบค่านี้ในฐานข้อมูล" if conf == "none"
+                      else "เทียบความหมายด้วยเวกเตอร์" if method == "vector"
+                      else "เทียบข้อความ")
+        out["method"] = method
         out["note"] = body.get("note")
         out["confidence"] = conf
         out["field"] = body.get("field")
@@ -76,6 +80,12 @@ def _label(step: dict) -> dict:
         out["warnings"] = body.get("warnings", [])
         if out["row_count"] == 0:
             out["how"] = "ค้นแล้วไม่มีข้อมูลตรงเงื่อนไข"
+
+    elif step["tool"] == "explore_relations":
+        out["how"] = "เดินกราฟความสัมพันธ์ที่สร้างจากฐานข้อมูล"
+        out["mode"] = body.get("mode")
+        out["related"] = body.get("related")
+        out["similar"] = body.get("similar")
 
     elif step["tool"] == "analyze_results":
         out["how"] = "คำนวณจากแถวที่ดึงมา"

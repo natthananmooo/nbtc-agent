@@ -21,6 +21,7 @@ from mcp.server.mcpserver import MCPServer
 from tools.analyze import analyze_results as _analyze
 from tools.chart import render_chart as _chart
 from tools.dashboard import generate_dashboard as _dashboard
+from tools.graph import explore_relations as _relations
 from tools.query import query_complaints as _query
 from tools.resolve import resolve_filter_values as _resolve
 from tools.resolve import values_for_prompt as _values
@@ -61,6 +62,12 @@ def _log_call(name: str, args: dict, result, started: float):
             if "confidence" in result:
                 line += "\n        ได้      confidence=%s  %d ตัวเลือก" % (
                     result["confidence"], len(result.get("candidates", [])))
+            if "related" in result:
+                line += "\n        ได้      ความสัมพันธ์ %s" % ", ".join(
+                    "%s %d ค่า" % (k, len(v)) for k, v in result["related"].items())
+            if "similar" in result:
+                line += "\n        ได้      ค่าใกล้เคียง %d ตัว เทียบบน %s" % (
+                    len(result["similar"]), result.get("compared_on"))
             if "findings" in result:
                 line += "\n        ได้      %d ข้อสรุป" % len(result["findings"])
             if "image_path" in result:
@@ -222,6 +229,56 @@ def query_complaints(
               {"metric": metric, "group_by": group_by, "filters": filters,
                "date_from": date_from, "date_to": date_to,
                "order_by": order_by, "limit": limit}, out, t0)
+    return out
+
+
+@mcp.tool()
+def explore_relations(
+    value: str,
+    field: str | None = None,
+    to_field: str | None = None,
+    mode: str = "related",
+    top_k: int = 8,
+) -> dict:
+    """ดูว่าค่าหนึ่งเกี่ยวข้องกับอะไรในข้อมูลจริง ใช้ตอนยังไม่รู้ว่าควรกรองด้วยอะไร
+
+    ตัวนี้ไม่ได้ตอบคำถามแทน query_complaints แต่ช่วยหาทิศทางก่อนจะไปนับจริง
+    เรียกเมื่อคำถามเป็นแนวสำรวจความสัมพันธ์ เช่น
+      เจ้านี้มีปัญหาอะไรเป็นพิเศษ
+      ปัญหาแบบนี้มักเกิดกับบริการประเภทไหน
+      มีเจ้าไหนลักษณะปัญหาคล้ายเจ้านี้บ้าง
+    ถ้าคำถามระบุสิ่งที่จะนับชัดอยู่แล้ว ให้ไป query_complaints ตรง ๆ ไม่ต้องเรียกตัวนี้
+
+    ค่าที่ส่งเข้ามาต้องเป็นค่าจริงในฐานข้อมูล จึงต้องเรียก resolve_filter_values ก่อน
+    แล้วเอาค่าที่ได้มาส่งทั้งสตริง ห้ามพิมพ์ย่อเอง
+
+    ผลลัพธ์แต่ละรายการมีสามตัวเลข
+      rows_all_years จำนวนเรื่องรวมทุกปีที่ปรากฏร่วมกัน
+      share_pct      สัดส่วนภายในค่าที่ถาม
+      lift           เทียบกับค่าเฉลี่ยทั้งระบบ มากกว่า 1 คือเด่นผิดปกติ
+                     ตัวนี้สำคัญกว่าจำนวนดิบ เพราะเจ้าใหญ่ย่อมเยอะไปหมดทุกหมวด
+
+    ตัวเลขทั้งหมดเป็นยอดรวมทุกปี ห้ามเอาไปตอบเมื่อผู้ใช้ถามตัวเลขหรือระบุปี
+    ให้ใช้เป็นตัวช่วยเลือกว่าจะกรองด้วยอะไร แล้วเรียก query_complaints ต่อเสมอ
+
+    Args:
+        value: ค่าจริงในฐานข้อมูล เช่น บริษัท ทรู มูฟ เอช ยูนิเวอร์แซล คอมมิวนิเคชั่น จำกัด
+        field: คอลัมน์ของค่านั้น เช่น provider, service_type, problem_group, province
+        to_field: อยากดูความสัมพันธ์ไปยังคอลัมน์ไหน เว้นว่างได้จะคืนทุกคอลัมน์ที่เชื่อมถึง
+        mode: related คือสิ่งที่พบร่วมกันบ่อย, similar คือค่าอื่นที่มีรูปแบบปัญหาคล้ายกัน
+        top_k: จำนวนรายการสูงสุดต่อคอลัมน์
+    """
+    t0 = time.time()
+    try:
+        out = _relations(value, field, to_field, mode, top_k)
+    except Exception as e:
+        out = _recoverable(
+            e, "ตรวจว่า value เป็นค่าจริงที่ได้จาก resolve_filter_values "
+               "และ mode เป็น related หรือ similar เท่านั้น",
+            valid_modes=["related", "similar"],
+            valid_fields=list(_db.DIMENSIONS))
+    _log_call("explore_relations",
+              {"value": value, "field": field, "to_field": to_field, "mode": mode}, out, t0)
     return out
 
 
@@ -398,6 +455,11 @@ def schema_values() -> str:
 
 
 if __name__ == "__main__":
+    # พิมพ์โหมดไว้ใน log ตั้งแต่ตอนเริ่ม จะได้ไม่วัดผลสลับกันโดยไม่รู้ตัว
+    print("[start] RAG_MODE=%s  EMBED_MODEL=%s" % (
+        os.environ.get("RAG_MODE", "off"),
+        os.environ.get("EMBED_MODEL", "intfloat/multilingual-e5-small")),
+        file=sys.stderr, flush=True)
     transport = os.environ.get("MCP_TRANSPORT", "streamable-http")
     if transport == "stdio":
         mcp.run(transport="stdio")

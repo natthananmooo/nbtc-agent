@@ -15,7 +15,13 @@ from __future__ import annotations
 from . import db
 
 MIN_DAYS = 0
-MAX_LIMIT = 1000   # กันไม่ให้ดึงทั้งตารางกลับเข้า context          # days_to_close ติดลบ ตัดออกตอนคำนวณค่าเฉลี่ย
+# เพดานนี้ไม่ได้มีไว้จำกัดคำถาม แต่มีไว้กันค่าที่เป็นไปไม่ได้
+# ตั้งจากจำนวนกลุ่มจริงสูงสุดที่วัดได้ในฐานข้อมูล
+#   district, year               4,924 กลุ่ม  มากที่สุดที่เจอ
+#   provider, problem_group, year 1,691 กลุ่ม
+#   province, year                1,168 กลุ่ม
+# ตั้ง 50000 ซึ่งมากกว่าหลายเท่า คำถามปกติจึงไม่มีทางชน
+MAX_LIMIT = 50000          # days_to_close ติดลบ ตัดออกตอนคำนวณค่าเฉลี่ย
 NULL_WARN_AT = 0.05   # คอลัมน์ที่ใช้กรองแล้วว่างเกินนี้ ต้องเตือน
 
 
@@ -164,7 +170,10 @@ def query_complaints(
         for r in rows:
             r["share_pct"] = round(r["count"] * 100.0 / total, 2) if total else 0.0
         if groups and len(rows) >= limit:
-            warnings.append("แสดงเพียง %d แถวแรก สัดส่วนคิดจากฐาน %d เรื่อง" % (limit, total))
+            warnings.append(
+                "ผลถูกตัดที่ %d กลุ่มแรกตามค่า limit สัดส่วนคิดจากฐาน %d เรื่อง "
+                "ถ้าคำถามต้องการครบทุกกลุ่ม ให้เรียกใหม่โดยเพิ่ม limit "
+                "ห้ามสรุปว่ามีเพียงเท่านี้" % (limit, total))
 
     # --- เตือนคอลัมน์ที่ใช้กรองแล้วมีค่าว่างเยอะ ---
     for col in (filters or {}):

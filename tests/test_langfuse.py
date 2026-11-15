@@ -62,7 +62,11 @@ with client.start_as_current_observation(
     with client.start_as_current_observation(name="tool ทดสอบ", as_type="tool",
                                              input={"arg": 1}) as span:
         span.update(output={"ok": True})
-    client.set_current_trace_io(input="ทดสอบ", output="สำเร็จ")
+    setter = getattr(client, "set_current_trace_io", None)
+    if setter:
+        setter(input="ทดสอบ", output="สำเร็จ")
+    else:
+        print("  (langfuse เวอร์ชันนี้ไม่มี set_current_trace_io ข้ามไป)")
 
 client.create_score(name="correctness", value=1.0, trace_id=tid, data_type="NUMERIC")
 client.flush()

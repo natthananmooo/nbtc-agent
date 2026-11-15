@@ -31,9 +31,12 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.client.streamable_http import streamable_http_client
 
-from observability import tracer
-
+# โหลด .env ก่อน import observability เสมอ
+# เพราะ observability อ่านคีย์ Langfuse ตอนถูกเรียกใช้ครั้งแรก
+# เผื่อไว้สองชั้น ชั้นนี้กับ lazy connect ฝั่ง observability
 load_dotenv()
+
+from observability import tracer  # noqa: E402
 
 MCP_URL = os.environ.get("MCP_URL", "http://127.0.0.1:8000/mcp")
 MODEL = os.environ.get("OPENROUTER_MODEL", "qwen/qwen-2.5-72b-instruct")

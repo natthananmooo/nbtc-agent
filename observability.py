@@ -31,8 +31,23 @@ class Tracer:
         self.client = None
         self.context: list[dict] = []     # ข้อมูลที่ดึงมาในรอบนี้ ใช้วัด faithfulness
         self.last_trace_id: str | None = None
-        self.run_label = os.environ.get("RUN_LABEL")   # แยกรอบมี RAG กับไม่มี RAG
+        self._tried = False
 
+    @property
+    def run_label(self):
+        """อ่านตอนใช้ ไม่ใช่ตอนสร้าง เพราะ eval ตั้งค่านี้หลัง import"""
+        return os.environ.get("RUN_LABEL")
+
+    def _connect(self):
+        """ต่อ Langfuse ตอนถูกเรียกใช้ครั้งแรก ไม่ใช่ตอน import
+
+        เดิมต่อใน __init__ ซึ่งทำงานตอน import observability
+        ถ้าโมดูลนั้นถูก import ก่อน load_dotenv คีย์จะยังไม่อยู่ใน env
+        tracer จึงถูกปิดเงียบ ๆ แล้วไม่มีใครรู้จนเปิดหน้าเว็บ Langfuse แล้วว่าง
+        """
+        if self._tried:
+            return
+        self._tried = True
         pub = os.environ.get("LANGFUSE_PUBLIC_KEY")
         sec = os.environ.get("LANGFUSE_SECRET_KEY")
         if not (pub and sec):
@@ -52,6 +67,7 @@ class Tracer:
 
     @property
     def enabled(self) -> bool:
+        self._connect()
         return self.client is not None
 
     # ------------------------------------------------------------ หนึ่งคำถาม
@@ -111,7 +127,14 @@ class Tracer:
                 "context_count": len(self.context),
             },
         )
-        self.client.set_current_trace_io(input=question, output=answer)
+        # เมธอดนี้มีไม่ครบทุกเวอร์ชันของ langfuse ถ้าไม่มีก็ข้าม
+        # trace ยังถูกบันทึกครบ เสียแค่ข้อความสรุปที่หัว trace
+        setter = getattr(self.client, "set_current_trace_io", None)
+        if setter:
+            setter(input=question, output=answer)
+        else:
+            self.client.update_current_span(
+                input={"question": question}, output={"answer": answer})
 
 
     # ------------------------------------------------------------ ให้คะแนน

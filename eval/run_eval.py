@@ -86,10 +86,13 @@ async def run_real(cases, label):
         if want and mode != want:
             print("\n  หยุด เพราะชื่อรอบ %r ควรคู่กับ RAG_MODE=%s แต่ server เป็น %s"
                   % (label, want, mode))
-            print("  แก้ .env แล้วรัน docker compose up -d mcp ก่อน")
-            raise SystemExit(2)
+            print("  แก้ .env แล้วรัน docker compose up -d --build mcp ก่อน")
+            # คืน None ออกไปเฉย ๆ ไม่ raise ข้างใน async context
+            # เพราะ TaskGroup จะห่อเป็น ExceptionGroup ยาวจนข้อความจริงถูกกลบ
+            return None
         if mode == "ไม่ทราบ":
-            print("  เตือน อ่านโหมดจาก server ไม่ได้ ผลรอบนี้ระบุคอนฟิกไม่ได้")
+            print("  อ่านโหมดจาก server ไม่ได้ แปลว่า container ยังเป็น image เก่า")
+            print("  รัน docker compose up -d --build mcp ก่อน")
         for case in cases:
             truth = ground_truth(case)
             messages = [{"role": "system", "content": system},
@@ -167,6 +170,8 @@ def main():
         results = run_selftest(cases, bad=args.selftest_bad)
     else:
         results = asyncio.run(run_real(cases, args.label))
+        if results is None:
+            return
 
     by_type: dict[str, list] = {}
     for r in results:

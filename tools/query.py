@@ -169,11 +169,19 @@ def query_complaints(
                          tuple(params))[0]["n"]
         for r in rows:
             r["share_pct"] = round(r["count"] * 100.0 / total, 2) if total else 0.0
-        if groups and len(rows) >= limit:
-            warnings.append(
-                "ผลถูกตัดที่ %d กลุ่มแรกตามค่า limit สัดส่วนคิดจากฐาน %d เรื่อง "
-                "ถ้าคำถามต้องการครบทุกกลุ่ม ให้เรียกใหม่โดยเพิ่ม limit "
-                "ห้ามสรุปว่ามีเพียงเท่านี้" % (limit, total))
+
+    # --- ผลถูกตัดตาม limit ต้องเตือนเสมอ ไม่ว่า metric ไหน ---
+    # เดิมบล็อกนี้อยู่ข้างใน if share_pct ทำให้ metric=count ซึ่งเป็นกรณีปกติที่สุด
+    # ถูกตัดแบบเงียบ ๆ เช่นถามรายอำเภอได้กลับมา 100 จาก 861 โดยไม่มีใครบอก
+    if groups and len(rows) >= limit:
+        all_groups = db.fetch(
+            "SELECT COUNT(*) AS n FROM (SELECT 1 FROM %s%s%s)" % (
+                db.TABLE, where_sql, group_sql),
+            tuple(params))[0]["n"]
+        warnings.append(
+            "ผลถูกตัดเหลือ %d กลุ่มตามค่า limit จากทั้งหมด %d กลุ่ม "
+            "ถ้าคำถามต้องการครบ ให้เรียกใหม่โดยตั้ง limit อย่างน้อย %d "
+            "ห้ามสรุปว่ามีเพียงเท่าที่เห็น" % (len(rows), all_groups, all_groups))
 
     # --- เตือนคอลัมน์ที่ใช้กรองแล้วมีค่าว่างเยอะ ---
     for col in (filters or {}):

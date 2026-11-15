@@ -14,7 +14,8 @@ from __future__ import annotations
 
 from . import db
 
-MIN_DAYS = 0          # days_to_close ติดลบ ตัดออกตอนคำนวณค่าเฉลี่ย
+MIN_DAYS = 0
+MAX_LIMIT = 1000   # กันไม่ให้ดึงทั้งตารางกลับเข้า context          # days_to_close ติดลบ ตัดออกตอนคำนวณค่าเฉลี่ย
 NULL_WARN_AT = 0.05   # คอลัมน์ที่ใช้กรองแล้วว่างเกินนี้ ต้องเตือน
 
 
@@ -77,6 +78,23 @@ def query_complaints(
     date_from : "YYYY-MM-DD" กรองจากวันที่รับเรื่อง
     """
     m = db.check_measure(metric)
+
+    # ตรวจช่วงของ limit ไว้ในฟังก์ชันเอง ไม่ฝากไว้กับ type hint
+    # ถ้าปล่อยให้ชั้น protocol ปฏิเสธก่อนเข้ามา LLM จะได้ error ดิบที่แก้ต่อไม่ได้
+    # เขียนเองแบบนี้ LLM จะได้ how_to_fix กลับไปแล้วเรียกใหม่ได้
+    try:
+        limit = int(limit)
+    except (TypeError, ValueError):
+        raise db.SchemaError("limit ต้องเป็นจำนวนเต็ม ได้รับ %r" % (limit,))
+    if not 1 <= limit <= MAX_LIMIT:
+        raise db.SchemaError(
+            "limit ต้องอยู่ระหว่าง 1 ถึง %d ได้รับ %d" % (MAX_LIMIT, limit))
+
+    if group_by is not None and isinstance(group_by, str):
+        raise db.SchemaError(
+            "group_by ต้องเป็นลิสต์ ไม่ใช่ข้อความ ได้รับ %r "
+            "ถ้าต้องการคอลัมน์เดียวให้ส่งเป็น [%r]" % (group_by, group_by))
+
     groups = [db.check_dimension(g) for g in (group_by or [])]
     warnings: list[str] = []
     base, params = _filter_clauses(filters, date_from, date_to, warnings)

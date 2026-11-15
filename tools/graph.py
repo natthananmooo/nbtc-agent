@@ -114,6 +114,7 @@ def explore_relations(value: str, field: str | None = None,
                        if str(value).strip() and str(value).strip() in n[1]})[:10]
         return {
             "ok": False,
+            "code": "VALUE_NOT_IN_GRAPH",
             "error": "ไม่มีค่า %r อยู่ในกราฟ" % value,
             "how_to_fix": "ต้องเรียก resolve_filter_values ให้ได้ค่าจริงก่อน "
                           "แล้วส่งค่าที่ได้มาทั้งสตริง ห้ามพิมพ์ย่อหรือดัดแปลง",
@@ -128,7 +129,7 @@ def explore_relations(value: str, field: str | None = None,
         target = to_field or "problem_group"
         base = _profile(g, node, target)
         if not base:
-            return {"ok": False,
+            return {"ok": False, "code": "NO_RELATION",
                     "error": "ค่านี้ไม่มีความสัมพันธ์กับคอลัมน์ %s" % target,
                     "how_to_fix": "ลองเปลี่ยน to_field เป็นคอลัมน์อื่น หรือใช้ mode related"}
         bt = sum(base.values()) or 1
@@ -189,7 +190,7 @@ def explore_relations(value: str, field: str | None = None,
         groups[f] = items[:top_k]
 
     if not groups:
-        return {"ok": False,
+        return {"ok": False, "code": "NO_RELATION",
                 "error": "ค่า %r ไม่มีความสัมพันธ์ที่หนาพอในกราฟ" % value,
                 "how_to_fix": "ลองใช้ query_complaints ตรง ๆ แทน"}
 

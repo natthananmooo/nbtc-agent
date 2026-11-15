@@ -499,6 +499,7 @@ def schema_values() -> str:
         % (years["a"], years["b"]),
         "  " + "  ".join("%d:%d" % (r["year"], r["n"]) for r in per_year),
         "ผู้ใช้พิมพ์ พ.ศ. มาได้เลย ตรงกับที่เก็บ ถ้าพิมพ์ ค.ศ. มา query_complaints แปลงขึ้นให้",
+        "RAG_MODE=%s" % os.environ.get("RAG_MODE", "off"),
         "วันที่เก็บรูปแบบ ปปปป-ดด-วว โดยปีเป็น พ.ศ. เช่น 2552-01-05",
         "คอลัมน์ received_date_raw และ closed_date_raw เก็บสตริงต้นฉบับไว้ครบ",
         "เดือนเก็บเป็นตัวเลข 1 ถึง 12",

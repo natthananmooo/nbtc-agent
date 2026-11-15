@@ -21,6 +21,15 @@ from eval.truth import ground_truth, load_cases
 
 OUT_DIR = Path(__file__).resolve().parent
 
+# ชื่อรอบต้องคู่กับโหมดที่ server รันอยู่จริง ไม่งั้นหยุดทันที
+RAG_MODE_SEEN = "ไม่ทราบ"
+
+MODE_OF_LABEL = {
+    "ไม่มี RAG": "off",
+    "BM25": "bm25",
+    "มี RAG rerank": "rerank",
+}
+
 
 def _perfect_answer(case: dict, truth: dict) -> str:
     """คำตอบในอุดมคติ สร้างจากเฉลย ใช้ตรวจว่าเครื่องวัดทำงานถูก"""
@@ -62,6 +71,25 @@ async def run_real(cases, label):
 
     async with agent.open_session() as session:
         system, oa_tools = await agent.build_context(session)
+
+        # อ่านโหมดจาก server จริง ไม่เชื่อสิ่งที่คนพิมพ์มาใน --label
+        # เคยพลาดมาแล้ว รันสามรอบด้วย RAG_MODE=off เหมือนกันหมด
+        # แล้วเอาผลไปเทียบกันราวกับเป็นคนละคอนฟิก
+        mode = "ไม่ทราบ"
+        for line in system.split("\n"):
+            if line.strip().startswith("RAG_MODE="):
+                mode = line.split("=", 1)[1].strip()
+                break
+        want = MODE_OF_LABEL.get(label)
+        print("  MCP Server รายงานว่า RAG_MODE=%s" % mode)
+        globals()["RAG_MODE_SEEN"] = mode
+        if want and mode != want:
+            print("\n  หยุด เพราะชื่อรอบ %r ควรคู่กับ RAG_MODE=%s แต่ server เป็น %s"
+                  % (label, want, mode))
+            print("  แก้ .env แล้วรัน docker compose up -d mcp ก่อน")
+            raise SystemExit(2)
+        if mode == "ไม่ทราบ":
+            print("  เตือน อ่านโหมดจาก server ไม่ได้ ผลรอบนี้ระบุคอนฟิกไม่ได้")
         for case in cases:
             truth = ground_truth(case)
             messages = [{"role": "system", "content": system},
@@ -162,7 +190,8 @@ def main():
 
     safe = args.label.replace(" ", "_").replace("/", "_")
     path = OUT_DIR / ("results_%s.json" % safe)
-    path.write_text(json.dumps({"label": args.label, "results": results},
+    path.write_text(json.dumps({"label": args.label, "rag_mode": RAG_MODE_SEEN,
+                                "results": results},
                                ensure_ascii=False, indent=2), encoding="utf-8")
     print("\nบันทึกที่", path)
 

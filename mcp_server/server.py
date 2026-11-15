@@ -15,6 +15,7 @@ import json
 import os
 import sys
 import time
+import traceback
 
 from mcp.server.mcpserver import MCPServer
 
@@ -114,13 +115,30 @@ def _rows_from(result_id, rows):
                         "วิธีที่ง่ายกว่าคือใส่ result_id ที่ query_complaints คืนมา")
 
 
-def _recoverable(err: Exception, how_to_fix: str, **hints) -> dict:
+# ความผิดพลาดที่คาดไว้แล้วและ LLM แก้ต่อเองได้ เช่นส่งชื่อคอลัมน์ผิด
+# ต้องแยกจากบั๊กของเราเอง ไม่งั้น KeyError ที่เกิดจากโค้ดเราเขียนผิด
+# จะถูกห่อเป็นคำแนะนำส่งให้ LLM แล้ว LLM ก็ลองใหม่วนไป โดยไม่มีใครเห็นว่ามีบั๊ก
+EXPECTED = (_db.SchemaError, ValueError)
+
+
+def _recoverable(err: Exception, how_to_fix: str, code: str = "INVALID_ARG",
+                 **hints) -> dict:
+    """ระดับที่หนึ่ง ผิดแล้วแก้ต่อได้ คืนเป็นผลลัพธ์ปกติให้ LLM อ่านแล้วลองใหม่"""
     return {
         "ok": False,
+        "code": code,
         "error": str(err) or type(err).__name__,
         "how_to_fix": how_to_fix,
         **hints,
     }
+
+
+def _unexpected(name: str, err: Exception):
+    """ระดับที่สอง ไม่คาดคิด แปลว่าเป็นบั๊กของเรา ต้องบันทึกแล้วโยนต่อให้เห็น"""
+    print("[bug] %s ล้มด้วย %s: %s" % (name, type(err).__name__, err),
+          file=sys.stderr, flush=True)
+    traceback.print_exc()
+    raise err
 
 
 mcp = MCPServer(
@@ -167,10 +185,12 @@ def resolve_filter_values(user_phrase: str, field: str | None = None) -> dict:
     t0 = time.time()
     try:
         out = _resolve(user_phrase, field)
-    except Exception as e:
+    except EXPECTED as e:
         out = _recoverable(
             e, "ตรวจชื่อ field ให้ตรงกับรายการที่ให้ไว้ หรือเว้นว่างเพื่อค้นทุกคอลัมน์",
             valid_fields=list(_db.DIMENSIONS))
+    except Exception as e:
+        _unexpected("resolve_filter_values", e)
     _log_call("resolve_filter_values",
               {"user_phrase": user_phrase, "field": field}, out, t0)
     return out
@@ -215,12 +235,14 @@ def query_complaints(
         out = _recoverable(
             e, "เลือกชื่อคอลัมน์หรือ metric จากรายการข้างล่าง แล้วเรียกใหม่",
             valid_columns=list(_db.DIMENSIONS), valid_metrics=list(_db.MEASURES))
-    except Exception as e:
+    except EXPECTED as e:
         out = _recoverable(
             e, "ตรวจรูปแบบพารามิเตอร์ เช่น group_by ต้องเป็นลิสต์ของชื่อคอลัมน์ "
                "filters ต้องเป็น dict ชื่อคอลัมน์ไปหาลิสต์ของค่า "
                "date_from และ date_to ต้องเป็น YYYY-MM-DD โดยปีเป็น พ.ศ.",
             valid_columns=list(_db.DIMENSIONS), valid_metrics=list(_db.MEASURES))
+    except Exception as e:
+        _unexpected("query_complaints", e)
     if isinstance(out, dict) and out.get("ok") is not False:
         out["result_id"] = _remember({"rows": out.get("rows", []),
                                       "warnings": out.get("warnings", []),
@@ -271,12 +293,14 @@ def explore_relations(
     t0 = time.time()
     try:
         out = _relations(value, field, to_field, mode, top_k)
-    except Exception as e:
+    except EXPECTED as e:
         out = _recoverable(
             e, "ตรวจว่า value เป็นค่าจริงที่ได้จาก resolve_filter_values "
                "และ mode เป็น related หรือ similar เท่านั้น",
             valid_modes=["related", "similar"],
             valid_fields=list(_db.DIMENSIONS))
+    except Exception as e:
+        _unexpected("explore_relations", e)
     _log_call("explore_relations",
               {"value": value, "field": field, "to_field": to_field, "mode": mode}, out, t0)
     return out
@@ -303,16 +327,18 @@ def analyze_results(
     t0 = time.time()
     data, warns, err = _rows_from(result_id, rows)
     if err:
-        out = {"ok": False, "error": err,
+        out = {"ok": False, "code": "RESULT_NOT_FOUND", "error": err,
                "how_to_fix": "เรียก query_complaints ก่อน แล้วส่ง result_id ที่ได้มาที่นี่",
                "available_result_ids": list(_RESULT_ORDER)}
     else:
         try:
             out = _analyze(data, question, mode, warns)
-        except Exception as e:
+        except EXPECTED as e:
             out = _recoverable(
                 e, "mode ต้องเป็นหนึ่งใน summary, trend, compare, share",
                 valid_modes=["summary", "trend", "compare", "share"])
+        except Exception as e:
+            _unexpected("analyze_results", e)
     _log_call("analyze_results",
               {"result_id": result_id, "mode": mode, "rows": len(data or [])}, out, t0)
     return out
@@ -345,18 +371,20 @@ def render_chart(
     t0 = time.time()
     data, _, err = _rows_from(result_id, rows)
     if err:
-        out = {"ok": False, "error": err,
+        out = {"ok": False, "code": "RESULT_NOT_FOUND", "error": err,
                "how_to_fix": "เรียก query_complaints ก่อน แล้วส่ง result_id ที่ได้มาที่นี่",
                "available_result_ids": list(_RESULT_ORDER)}
     else:
         try:
             out = _chart(data, chart_type, x, y, title, filename)
-        except Exception as e:
+        except EXPECTED as e:
             out = _recoverable(
                 e, "x และ y ต้องเป็นชื่อคอลัมน์ที่มีอยู่จริงใน rows "
                    "และ chart_type ต้องเป็นหนึ่งใน bar, barh, line, pie",
                 columns_in_rows=list(data[0]) if data else [],
                 valid_chart_types=["bar", "barh", "line", "pie"])
+        except Exception as e:
+            _unexpected("render_chart", e)
     _log_call("render_chart",
               {"result_id": result_id, "chart_type": chart_type, "x": x, "y": y}, out, t0)
     return out
@@ -401,7 +429,7 @@ def generate_dashboard(
                       "title": p.get("title", "แผงที่ %d" % i)})
 
     if not built:
-        out = {"ok": False,
+        out = {"ok": False, "code": "RESULT_NOT_FOUND",
                "error": "ไม่มีแผงไหนใช้ได้ " + " ".join(bad),
                "how_to_fix": "เรียก query_complaints ให้ครบทุกมุมมองก่อน "
                              "แล้วเอา result_id ที่ได้มาใส่ในแต่ละแผง",
@@ -411,11 +439,13 @@ def generate_dashboard(
             out = _dashboard(title, built, notes)
             if bad:
                 out.setdefault("warnings", []).extend(bad)
-        except Exception as e:
+        except EXPECTED as e:
             out = _recoverable(
                 e, "x และ y ต้องเป็นชื่อคอลัมน์ที่มีอยู่จริงในผลลัพธ์ "
                    "และ chart_type ต้องเป็นหนึ่งใน bar, barh, line, pie",
                 valid_chart_types=["bar", "barh", "line", "pie"])
+        except Exception as e:
+            _unexpected("generate_dashboard", e)
     _log_call("generate_dashboard",
               {"title": title, "panels": len(panels or [])}, out, t0)
     return out

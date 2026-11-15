@@ -99,6 +99,7 @@ def _label(step: dict) -> dict:
         out["how"] = "เครื่องมือแจ้งว่าพารามิเตอร์ไม่ถูก"
         out["error"] = body.get("error")
         out["how_to_fix"] = body.get("how_to_fix")
+        out["code"] = body.get("code")
         return out
 
     if step["tool"] == "resolve_filter_values":

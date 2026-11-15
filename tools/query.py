@@ -12,6 +12,8 @@ SQL ถูกประกอบขึ้นที่นี่จากชื่�
 
 from __future__ import annotations
 
+import json
+
 from . import db
 
 MIN_DAYS = 0
@@ -84,6 +86,7 @@ def query_complaints(
     date_from : "YYYY-MM-DD" กรองจากวันที่รับเรื่อง
     """
     m = db.check_measure(metric)
+    warn_group_by = None
 
     # ตรวจช่วงของ limit ไว้ในฟังก์ชันเอง ไม่ฝากไว้กับ type hint
     # ถ้าปล่อยให้ชั้น protocol ปฏิเสธก่อนเข้ามา LLM จะได้ error ดิบที่แก้ต่อไม่ได้
@@ -96,13 +99,39 @@ def query_complaints(
         raise db.SchemaError(
             "limit ต้องอยู่ระหว่าง 1 ถึง %d ได้รับ %d" % (MAX_LIMIT, limit))
 
-    if group_by is not None and isinstance(group_by, str):
-        raise db.SchemaError(
-            "group_by ต้องเป็นลิสต์ ไม่ใช่ข้อความ ได้รับ %r "
-            "ถ้าต้องการคอลัมน์เดียวให้ส่งเป็น [%r]" % (group_by, group_by))
+    # รับสตริงเข้ามาได้ เพื่อให้คำอธิบายมาจากโค้ดเรา ไม่ใช่ข้อความดิบจากชั้น protocol
+    # ถ้าประกาศ type เป็น list อย่างเดียว SDK จะปฏิเสธก่อนถึงตรงนี้
+    # แล้ว LLM จะได้แค่ rejected arguments ซึ่งไม่บอกว่าต้องแก้ยังไง
+    if isinstance(group_by, str):
+        text = group_by.strip()
+        if text.startswith("["):
+            try:
+                group_by = json.loads(text)
+            except Exception:
+                raise db.SchemaError(
+                    "group_by เป็นข้อความที่แปลงเป็นลิสต์ไม่ได้ ได้รับ %r "
+                    "ให้ส่งเป็นลิสต์จริง เช่น [\"province\"]" % group_by)
+        else:
+            # คอลัมน์เดียวที่ลืมใส่วงเล็บ รับให้แล้วเตือน ดีกว่าปฏิเสธทิ้ง
+            group_by = [t.strip() for t in text.split(",") if t.strip()]
+            warn_group_by = ("group_by ควรเป็นลิสต์ ได้รับข้อความ %r "
+                             "ตีความเป็น %s ให้แล้ว ครั้งหน้าส่งเป็นลิสต์" % (text, group_by))
+
+    if isinstance(filters, str):
+        try:
+            filters = json.loads(filters)
+        except Exception:
+            raise db.SchemaError(
+                "filters ต้องเป็น object ไม่ใช่ข้อความ ได้รับ %r "
+                "เช่น {\"year\": [2564]}" % filters)
+        if not isinstance(filters, dict):
+            raise db.SchemaError(
+                "filters ต้องเป็น object ที่มีชื่อคอลัมน์เป็นคีย์ เช่น {\"year\": [2564]}")
 
     groups = [db.check_dimension(g) for g in (group_by or [])]
     warnings: list[str] = []
+    if warn_group_by:
+        warnings.append(warn_group_by)
     base, params = _filter_clauses(filters, date_from, date_to, warnings)
 
     # --- metric ---
@@ -203,7 +232,6 @@ def query_complaints(
 
 
 if __name__ == "__main__":
-    import json
 
     def show(title, **kw):
         r = query_complaints(**kw)

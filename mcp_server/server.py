@@ -202,8 +202,8 @@ def resolve_filter_values(user_phrase: str, field: str | None = None) -> dict:
 @mcp.tool()
 def query_complaints(
     metric: str = "count",
-    group_by: list[str] | None = None,
-    filters: dict | None = None,
+    group_by: list[str] | str | None = None,
+    filters: dict | str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
     order_by: str | None = None,

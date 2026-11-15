@@ -17,6 +17,9 @@ charts/*
 *.png
 *.log
 
+# ยกเว้นภาพประกอบ README ต้องขึ้น git ไม่งั้น GitHub แสดงภาพไม่ได้
+!docs/images/*.png
+
 # Python
 __pycache__/
 *.py[cod]

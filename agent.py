@@ -228,21 +228,64 @@ def _complete(client, messages: list[dict], oa_tools: list[dict]):
     raise RuntimeError("โมเดลไม่ส่งคำตอบกลับมาหลังลอง %d ครั้ง: %s" % (LLM_RETRIES, last))
 
 
+def _args_of(raw: str):
+    """คืนพารามิเตอร์ของ tool เป็น dict ถ้าแปลงได้ ไม่งั้นคืนข้อความดิบไว้ดู"""
+    try:
+        return json.loads(raw or "{}")
+    except json.JSONDecodeError:
+        return raw
+
+
+def _reasoning_of(msg):
+    """ดึงความคิดของโมเดลตระกูล reasoning ถ้ามี
+
+    แต่ละผู้ให้บริการตั้งชื่อฟิลด์ไม่เหมือนกัน บางเจ้าใช้ reasoning
+    บางเจ้าใช้ reasoning_content และบางเจ้าซ่อนไว้ใน model_extra
+    gpt-4.1-mini ที่ใช้อยู่ไม่ส่งอะไรมาเลย ฟิลด์นี้จึงเป็น None ตามปกติ
+    วันไหนสลับไปใช้โมเดล reasoning มันจะโผล่มาเองโดยไม่ต้องแก้โค้ด
+    """
+    for key in ("reasoning", "reasoning_content"):
+        value = getattr(msg, key, None)
+        if value:
+            return value
+    extra = getattr(msg, "model_extra", None) or {}
+    for key in ("reasoning", "reasoning_content"):
+        if extra.get(key):
+            return extra[key]
+    return None
+
+
 async def run_turn(session, client, messages: list[dict], oa_tools: list[dict],
                    question: str) -> str:
     """วนรอบจนกว่าโมเดลจะตอบเป็นข้อความ แทนที่จะขอเรียก tool เพิ่ม"""
-    with tracer.question(question):
+    system_prompt = next(
+        (m.get("content") for m in messages if m.get("role") == "system"), None)
+
+    with tracer.question(question, system_prompt=system_prompt):
         answer = "หยุดเพราะเรียก tool เกิน %d รอบแล้วยังไม่ได้คำตอบ" % MAX_STEPS
 
         for _ in range(MAX_STEPS):
-            visible = [m for m in messages if m.get("role") != "system"][-8:]
-            with tracer.generation(MODEL, visible) as gen:
+            # ส่ง messages ทั้งชุดรวม system prompt ตามที่ส่งให้โมเดลจริง
+            # เดิมกรอง system ทิ้งแล้วตัดเหลือ 8 ข้อความท้าย trace เบากว่าก็จริง
+            # แต่ตรวจย้อนไม่ได้ว่าโมเดลเห็นอะไรก่อนตัดสินใจเรียก tool
+            # list() กันไว้เพราะ messages ถูก append ต่อระหว่างวนรอบ
+            with tracer.generation(MODEL, list(messages)) as gen:
                 resp = _complete(client, messages, oa_tools)
-                msg = resp.choices[0].message
+                choice = resp.choices[0]
+                msg = choice.message
                 usage = getattr(resp, "usage", None)
                 gen.done(
-                    msg.content or [c.function.name for c in (msg.tool_calls or [])],
+                    {
+                        "content": msg.content,
+                        "reasoning": _reasoning_of(msg),
+                        "tool_calls": [
+                            {"name": c.function.name,
+                             "arguments": _args_of(c.function.arguments)}
+                            for c in (msg.tool_calls or [])
+                        ],
+                    },
                     tokens=getattr(usage, "total_tokens", None),
+                    finish_reason=getattr(choice, "finish_reason", None),
                 )
 
             messages.append(msg.model_dump(exclude_none=True))

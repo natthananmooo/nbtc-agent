@@ -16,7 +16,8 @@ import json
 import os
 from pathlib import Path
 
-from eval.score import correctness, faithfulness
+from eval.score import (correctness, explain_correctness,
+                        explain_faithfulness, faithfulness)
 from eval.truth import ground_truth, load_cases
 
 OUT_DIR = Path(__file__).resolve().parent
@@ -119,14 +120,18 @@ async def run_real(cases, label):
 def _score_one(case, truth, answer, ctx, tracer=None, schema=""):
     c, c_detail = correctness(case, answer, truth)
     f, unsupported = faithfulness(answer, ctx, schema)
+    # อธิบายที่มาของคะแนนเป็นข้อความ แล้วแนบไปกับคะแนนใน Langfuse
+    # เพื่อให้เปิดดูแล้วคำนวณตามได้ทีละขั้น ไม่ต้องย้อนมาอ่านโค้ด
+    why_c = explain_correctness(truth, c, c_detail)
+    why_f = explain_faithfulness(answer, ctx, schema, f, unsupported)
     if tracer is not None and tracer.enabled:
-        tracer.add_score("correctness", c, json.dumps(c_detail, ensure_ascii=False))
-        tracer.add_score("faithfulness", f,
-                         "ตัวเลขที่หาที่มาไม่ได้: %s" % unsupported if unsupported else "")
+        tracer.add_score("correctness", c, why_c)
+        tracer.add_score("faithfulness", f, why_f)
     return {
         "id": case["id"], "type": case["type"], "question": case["question"],
         "answer": answer, "correctness": c, "faithfulness": f,
         "unsupported_numbers": unsupported, "detail": c_detail,
+        "why_correctness": why_c, "why_faithfulness": why_f,
     }
 
 

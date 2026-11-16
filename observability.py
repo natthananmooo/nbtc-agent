@@ -72,7 +72,8 @@ class Tracer:
 
     # ------------------------------------------------------------ หนึ่งคำถาม
     @contextmanager
-    def question(self, text: str, session_id: str | None = None):
+    def question(self, text: str, session_id: str | None = None,
+                 system_prompt: str | None = None):
         self.context = []
         if not self.enabled:
             yield None
@@ -82,6 +83,10 @@ class Tracer:
             meta["session_id"] = session_id
         if self.run_label:
             meta["run_label"] = self.run_label
+        if system_prompt:
+            # วางไว้ที่หัว trace ด้วย เพื่อให้หาคำสั่งที่โมเดลได้รับเจอในที่เดียว
+            # ไม่ต้องไล่เปิด generation ทีละขั้น
+            meta["system_prompt"] = system_prompt
         with self.client.start_as_current_observation(
             name="ถาม-ตอบหนึ่งรอบ", as_type="agent", input={"question": text},
             metadata=meta or None,
@@ -146,7 +151,7 @@ class Tracer:
             return
         self.client.create_score(
             name=name, value=float(value), trace_id=tid,
-            data_type="NUMERIC", comment=comment[:900] or None)
+            data_type="NUMERIC", comment=comment[:1800] or None)
         self.client.flush()
 
 

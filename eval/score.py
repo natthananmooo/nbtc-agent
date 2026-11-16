@@ -136,6 +136,67 @@ def correctness(case: dict, answer: str, truth: dict) -> tuple[float, dict]:
     }
 
 
+# ------------------------------------------- คำอธิบายที่มาของคะแนน
+# ข้อความพวกนี้ถูกส่งไปกับคะแนนใน Langfuse เพื่อให้เปิดดูแล้วคำนวณตามได้
+# ทีละขั้นโดยไม่ต้องเปิดโค้ด ตอบคำถามว่า "คะแนนนี้มาจากไหน"
+
+
+def _brief(seq, n: int = 12) -> str:
+    """ตัดรายการยาวให้สั้นลง กัน comment ยาวเกินที่ Langfuse รับ"""
+    seq = list(seq or [])
+    if len(seq) <= n:
+        return str(seq)
+    return "%s ... อีก %d ตัว" % (seq[:n], len(seq) - n)
+
+
+def explain_correctness(truth: dict, score: float, detail: dict) -> str:
+    if truth["kind"] == "clarify":
+        return (
+            "correctness ชนิด clarify\n"
+            "เกณฑ์ ถูกเมื่อถามกลับ หรือบอกตรง ๆ ว่าไม่มีข้อมูล ไม่ใช่ตอบเป็นตัวเลข\n"
+            "ถามกลับ = %s\n"
+            "บอกว่าไม่มีข้อมูล = %s\n"
+            "เหตุผลที่คำถามนี้ต้องถามกลับ %s\n"
+            "คะแนน = %.4f"
+            % (detail.get("ถามกลับ"), detail.get("บอกว่าไม่มีข้อมูล"),
+               detail.get("เหตุผลที่ต้องถาม", ""), score))
+
+    values, hit_v = detail.get("ค่าที่ต้องมี", []), detail.get("เจอ", [])
+    labels, hit_l = detail.get("ชื่อกลุ่มที่ต้องมี", []), detail.get("เจอชื่อ", [])
+    parts = []
+    if values:
+        parts.append("ตัวเลข %d/%d" % (len(hit_v), len(values)))
+    if labels:
+        parts.append("ชื่อกลุ่ม %d/%d" % (len(hit_l), len(labels)))
+    return (
+        "correctness เทียบกับเฉลยที่คำนวณจาก SQL ตรง ๆ ไม่มี LLM ตัดสิน\n"
+        "สูตร เฉลี่ยของสัดส่วนที่เจอ = %s\n"
+        "ค่าที่ต้องมี %s\n"
+        "เจอในคำตอบ %s\n"
+        "ชื่อกลุ่มที่ต้องมี %s\n"
+        "เจอในคำตอบ %s\n"
+        "คะแนน = %.4f"
+        % (" และ ".join(parts) or "(ไม่มีเกณฑ์)", _brief(values), _brief(hit_v),
+           _brief(labels), _brief(hit_l), score))
+
+
+def explain_faithfulness(answer: str, context: list[dict], schema: str,
+                         score: float, unsupported: list[float]) -> str:
+    claimed = numbers(_strip_list_markers(answer))
+    if not claimed:
+        return "faithfulness = 1.0000 เพราะคำตอบไม่มีตัวเลขให้ตรวจ"
+    return (
+        "faithfulness ตรวจว่าตัวเลขทุกตัวในคำตอบมาจากข้อมูลที่ดึงมาจริง\n"
+        "สูตร 1 - (ตัวเลขที่หาที่มาไม่ได้ / ตัวเลขทั้งหมดในคำตอบ)\n"
+        "ตัวเลขที่คำตอบอ้าง %d ตัว %s\n"
+        "ที่หาที่มาไม่ได้ %d ตัว %s\n"
+        "แหล่งอ้างอิง ผลของ tool %d รายการ บวก schema จาก MCP resource\n"
+        "เลขลำดับข้อแบบ 1. 2. ถูกตัดทิ้งก่อนนับ ไม่ถือเป็นตัวเลขที่อ้าง\n"
+        "คะแนน = 1 - %d/%d = %.4f"
+        % (len(claimed), _brief(claimed), len(unsupported), _brief(unsupported),
+           len(context or []), len(unsupported), len(claimed), score))
+
+
 if __name__ == "__main__":
     ctx = [{"tool": "query_complaints",
             "output": json.dumps({"rows": [{"province": "กรุงเทพมหานคร", "count": 798},

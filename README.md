@@ -74,6 +74,38 @@ complaints.db   mount แบบ :ro
 
 ---
 
+## แผนผังการทำงาน
+
+ห้าแผ่นนี้อธิบายระบบตั้งแต่ภาพรวม ลงไปถึงสัญญาระหว่าง LLM กับ tool
+
+### ลำดับการทำงานทั้งระบบ
+
+![Flow การทำงานของระบบ](docs/images/flow.png)
+
+ต่างจากระบบที่ยิง API แล้วจบในครั้งเดียว ตรงที่ขั้นที่ 2 ถึง 7 วนเป็นลูป LLM เรียก tool
+กี่ครั้งก็ได้จนกว่าจะพอตอบ สูงสุด 8 รอบ และไม่มี API ภายนอกในเส้นทางข้อมูลเลย
+มีแต่ไฟล์ SQLite ที่ mount แบบอ่านอย่างเดียว
+
+### MCP SDK ทำหน้าที่อะไร
+
+![MCP SDK ทำหน้าที่อะไร](docs/images/mcp-sdk.png)
+
+### จาก Python function เป็น MCP Tool
+
+![จาก Python function เป็น MCP Tool](docs/images/mcp-tool.png)
+
+### Docstring คือคำสั่งที่ LLM อ่านก่อนตัดสินใจ
+
+![Docstring ของ tool](docs/images/docstring.png)
+
+กลไกการถามกลับทั้งหมดอยู่ในข้อความนี้ ไม่ได้อยู่ในโค้ด
+
+### การจัดการข้อผิดพลาดสองระดับ
+
+![การจัดการข้อผิดพลาดสองระดับ](docs/images/error-handling.png)
+
+---
+
 ## หน้าเว็บ
 
 ![หน้าเว็บตอบคำถาม](docs/images/web-answer.png)

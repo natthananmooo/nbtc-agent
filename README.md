@@ -313,34 +313,35 @@ SDK นำ docstring ไปใส่เป็น `description` ใน schema ก
 
 ### ส่วนประกอบที่ใช้จริง
 
-```
-ผู้ใช้ (ภาษาไทย)
-      |
-      v
-Web UI  port 8080                          แสดงคำตอบ SQL กราฟ และ trace สด
-      |
-      v
-Agent Core  agent.py                       ----HTTPS---->  OpenRouter
-  ประกอบ complete prompt = system prompt + user prompt                 gpt-4.1-mini
-  ตัดสินใจว่าจะเรียก tool ไหน                                function calling
-  วนจนกว่าจะได้คำตอบ หรือครบ 8 รอบ
-      |
-      | MCP protocol (streamable-http)
-      v
-MCP Server  Docker container  port 8000
-  resolve_filter_values     แปลคำผู้ใช้เป็นค่าจริง
-  explore_relations         เดินกราฟความสัมพันธ์
-  query_complaints          ประกอบ SQL แล้วรันแบบอ่านอย่างเดียว
-  analyze_results           คำนวณสถิติจากผลที่ดึงมา
-  render_chart              วาดกราฟ
-  generate_dashboard        รวมหลายกราฟเป็นหน้าสรุป
-  schema://values           resource บอกค่าจริงทุกคอลัมน์
-      |
-      v
-complaints.db   mount แบบ :ro
-```
+![ส่วนประกอบที่ใช้จริง](docs/images/architecture.png)
 
 **การตัดสินใจอยู่ที่ Agent Core ที่เดียว** ส่วน tool ทำงานที่กำหนดไว้เท่านั้น ไม่มี tool ไหนเรียก tool อื่น
+
+#### สอง SDK คนละหน้าที่
+
+โครงงานนี้ใช้ SDK สองตัวที่เป็นคนละเรื่องกัน เวลาพูดถึง "SDK" ต้องระบุว่าหมายถึงตัวไหน
+
+| | LLM SDK | MCP SDK |
+| --- | --- | --- |
+| แพ็กเกจ | `openai` | `mcp` รุ่น 2.x |
+| หน้าที่ | คุยกับโมเดลผ่าน endpoint | ประกาศและเสิร์ฟ tool ผ่านโปรโตคอล |
+| อยู่ในไฟล์ | `agent.py` | `mcp_server/server.py` |
+| คลาสหลัก | `OpenAI(...)` | `MCPServer` ไม่ใช่ FastMCP |
+| อ่านผลด้วย | `resp.choices[0].message` | `result.content` |
+
+ฝั่ง LLM SDK ใช้รูปแบบ **thin client** คือใช้ OpenAI SDK ตัวจริงแล้วเปลี่ยน `base_url` เป็น OpenRouter
+ไม่ต้องใช้ framework แยกของ OpenRouter
+
+```python
+# agent.py บรรทัด 344-345
+from openai import OpenAI
+client = OpenAI(api_key=key, base_url="https://openrouter.ai/api/v1")
+```
+
+ผลที่ได้คือ **สลับโมเดลได้โดยไม่แตะโค้ด** เปลี่ยนแค่ `OPENROUTER_MODEL` ใน `.env`
+เพราะสิ่งที่ SDK ต้องเข้าใจคือ schema ของ endpoint ไม่ใช่ยี่ห้อโมเดล
+ทั้ง `openai/gpt-4.1-mini`, `qwen/qwen-2.5-72b-instruct` และ `google/gemini-*`
+จึงอ่านผลด้วย `resp.choices[0].message` เหมือนกันหมด
 
 ### เทคโนโลยีและหน้าที่ของแต่ละส่วน
 

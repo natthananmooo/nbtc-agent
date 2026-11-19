@@ -99,6 +99,8 @@
 
 ทุกการเรียก tool ถูกพิมพ์ลง log พร้อม SQL ที่รันจริง จำนวนแถว และเวลาที่ใช้
 
+อ่าน log ทีละบรรทัดว่าแต่ละช่วงบอกอะไร อยู่ใน [ทุกอย่างรันบน Docker](#ทุกอย่างรันบน-docker)
+
 ---
 
 ## 3. Key Features
@@ -354,6 +356,176 @@ complaints.db   mount แบบ :ro
 | กราฟความสัมพันธ์ | `networkx` | 271 node 1,903 edge |
 | Observability | Langfuse | เก็บ complete prompt เต็ม tool call SQL และคะแนน |
 | Deploy | Docker Compose | สอง service คือ `mcp` และ `web` |
+
+### ทุกอย่างรันบน Docker
+
+ระบบไม่ได้รันจาก `python` บนเครื่องโดยตรง แต่ถูกแยกเป็นสอง container ที่คุยกันผ่านเครือข่ายของ Compose
+ทำแบบนี้เพราะมาตรฐาน MCP แยก Client กับ Server ออกจากกันอยู่แล้ว การแยก container ทำให้แยกจริงในระดับโปรเซสและเครือข่าย
+ไม่ใช่แค่แยกไฟล์ และทำให้ข้อ 4 ของกลไกอ่านอย่างเดียวบังคับได้ที่ระดับ kernel
+
+| service | container | พอร์ต | รันอะไร | บทบาทตามมาตรฐาน MCP |
+| --- | --- | --- | --- | --- |
+| `mcp` | `nbtc-mcp` | 8000 | `python -m mcp_server.server` | **MCP Server** ประกาศ 6 tool และ 1 resource |
+| `web` | `nbtc-web` | 8080 | `uvicorn web.app:app` | **MCP Host + Client** หน้าเว็บและ `agent.py` |
+
+`web` ต่อ `mcp` ด้วยชื่อ service ไม่ใช่ `localhost`
+
+```yaml
+environment:
+  MCP_URL: http://mcp:8000/mcp
+depends_on:
+  - mcp
+```
+
+![container ที่รันอยู่](docs/images/docker-containers.png)
+
+ภาพนี้คือหน้า Containers ของ Docker Desktop หลังสั่ง `docker compose up -d`
+แถวบนชื่อ `nbtc-agent` คือกลุ่มของ Compose ไม่ใช่ container แถวในคือ `nbtc-mcp` id `c5bcd91d8a39`
+image `nbtc-agent-mcp:latest` เปิดพอร์ต `8000:8000`
+ทั้งกลุ่มใช้ CPU **0.47%** และ RAM **152 MB** ทั้งที่ image ของ `mcp` ใหญ่หลาย GB
+เพราะน้ำหนักส่วนใหญ่คือไฟล์โมเดลที่อยู่บนดิสก์ ไม่ได้ถูกโหลดขึ้น RAM ทั้งก้อน
+
+---
+
+#### คำสั่งที่ใช้จริง
+
+```bash
+docker compose up -d --build       # build image ทั้งสองตัวแล้วรันเบื้องหลัง
+docker compose ps                  # ดูว่า container ไหนขึ้นแล้ว พอร์ตอะไร
+docker compose logs -f mcp         # ตามดู log ของ MCP Server สด
+docker compose down                # หยุดและลบ container
+docker images                      # ดูขนาด image
+```
+
+![docker compose up --build](docs/images/docker-build.png)
+
+ตอน build ขั้นที่กินเวลาที่สุดคือขั้นดาวน์โหลด `torch` รุ่น CPU กับขั้นฝังโมเดลจัดอันดับลง image
+สองขั้นนี้ถูก cache ไว้ รอบต่อไปที่แก้แค่โค้ดจึงขึ้นเร็ว เพราะ `COPY tools/` อยู่ล่างสุดของ Dockerfile
+
+![docker compose ps](docs/images/docker-ps.png)
+
+---
+
+#### สามข้อที่ตั้งใจทำใน `mcp_server/Dockerfile`
+
+| บรรทัด | ทำอะไร | ทำไมต้องทำ |
+| --- | --- | --- |
+| `pip install torch --index-url .../whl/cpu` | ลง torch รุ่น CPU จาก index ของ PyTorch เอง | ถ้าปล่อยให้ลงจาก PyPI จะได้รุ่น CUDA ที่ใหญ่กว่าสิบเท่า ทั้งที่เครื่องไม่มีการ์ดจอ |
+| `RUN python -c "CrossEncoder(...)"` + `ENV HF_HUB_OFFLINE=1` | ดาวน์โหลดโมเดลจัดอันดับฝังลง image ตั้งแต่ตอน build | ตอนรันไม่ต้องต่ออินเทอร์เน็ต และได้โมเดลเวอร์ชันเดิมทุกครั้ง ผลวัดจึงเทียบกันได้ |
+| `apt-get install fonts-thai-tlwg` | ลงฟอนต์ไทยใน image | ไม่งั้น `matplotlib` วาดตัวอักษรไทยออกมาเป็นสี่เหลี่ยม |
+
+![ขนาด image](docs/images/docker-images.png)
+
+**ฐานข้อมูลไม่ได้ถูก copy เข้า image** แต่ mount เข้ามาตอนรัน
+
+```yaml
+volumes:
+  - ./data/complaints.db:/data/complaints.db:ro     # อ่านอย่างเดียวที่ระดับ kernel
+  - ./charts:/charts                                # โฟลเดอร์เดียวที่เขียนได้
+```
+
+![พิสูจน์ว่าเขียนไม่ได้](docs/images/docker-readonly.png)
+
+เข้าไปลองเขียนไฟล์ฐานข้อมูลใน container ตรง ๆ แล้ว kernel ปฏิเสธ
+นี่คือชั้นที่ 4 ของ [กลไกอ่านอย่างเดียว](#กลไกอ่านอย่างเดียว-4-ชั้น) ซึ่งเป็นชั้นเดียวที่โค้ดของเราข้ามไม่ได้เลยแม้เขียนผิด
+
+---
+
+#### อ่าน log ของ `nbtc-mcp` ทีละช่วง
+
+![log ของ MCP Server](docs/images/docker-mcp-logs.png)
+
+log แบ่งได้เป็นสี่ช่วง แต่ละช่วงบอกคนละเรื่อง
+
+**🟩 ช่วงที่ 1 — ตอน container เพิ่งขึ้น**
+
+```
+[start] RAG_MODE=rerank RERANK_MODEL=BAAI/bge-reranker-v2-m3
+INFO:     Started server process [1]
+INFO:     StreamableHTTP session manager started
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000
+```
+
+| บรรทัด | อ่านว่าอย่างไร |
+| --- | --- |
+| `[start] RAG_MODE=rerank` | บรรทัดนี้เราพิมพ์เอง เพื่อยืนยันว่า container กำลังรันขาไหนของการวัดผลสามขา ตอนวัดจะได้ไม่สลับขากันโดยไม่รู้ตัว |
+| `Started server process [1]` | PID เป็น 1 แปลว่าโปรเซสนี้คือโปรเซสหลักของ container ไม่ได้ถูกห่อด้วย shell |
+| `StreamableHTTP session manager started` | ตัวจัดการ session ของ MCP transport ชั้น Transport Layer พร้อมแล้ว |
+| `Uvicorn running on http://0.0.0.0:8000` | bind ที่ `0.0.0.0` ไม่ใช่ `127.0.0.1` ไม่งั้น container อื่นในเครือข่ายเดียวกันต่อไม่ได้ |
+
+**🟦 ช่วงที่ 2 — มีคนเปิดพอร์ตนี้ด้วยเบราว์เซอร์**
+
+```
+INFO:  192.168.65.1:62835 - "GET / HTTP/1.1" 404 Not Found
+INFO:  192.168.65.1:62835 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+```
+
+`192.168.65.1` คือ gateway ที่ Docker Desktop ใช้แทนเครื่อง macOS ของเรา แปลว่าคนเปิด `localhost:8000` จากเบราว์เซอร์
+ได้ 404 เพราะ **MCP Server ไม่มีหน้าเว็บ** มีแต่ endpoint `/mcp` ที่รับ JSON-RPC
+เห็น 404 ตรงนี้ไม่ใช่ error แต่แปลว่าเปิดผิดพอร์ต หน้าเว็บอยู่ที่ `8080`
+
+**🟨 ช่วงที่ 3 — วงจรชีวิตหนึ่ง session ของ MCP**
+
+```
+INFO  Created new transport with session ID: 521d64364fc4447ebb001e7ba0f1a54a
+INFO:  172.21.0.3:50024 - "POST /mcp HTTP/1.1" 200 OK
+INFO:  172.21.0.3:50040 - "POST /mcp HTTP/1.1" 202 Accepted
+INFO:  172.21.0.3:50046 - "GET  /mcp HTTP/1.1" 200 OK
+INFO:  172.21.0.3:50060 - "DELETE /mcp HTTP/1.1" 200 OK
+INFO  Terminating session: 521d64364fc4447ebb001e7ba0f1a54a
+```
+
+| สิ่งที่เห็น | ตรงกับอะไรในมาตรฐาน MCP |
+| --- | --- |
+| `172.21.0.3` | IP ภายในเครือข่ายของ Compose **ไม่ใช่** `192.168.65.1` แปลว่าคนเรียกคือ container `web` ไม่ใช่คนกดจากเบราว์เซอร์ พิสูจน์ว่า Client กับ Server คุยกันข้าม container จริง |
+| `Created new transport with session ID` | ขั้น `initialize` ของ lifecycle ฝั่ง Server ออก session id ให้ Client ถือไว้ |
+| `POST /mcp` → `200 OK` | Client ส่ง JSON-RPC request เช่น `tools/list` หรือ `tools/call` แล้วรอคำตอบ |
+| `POST /mcp` → `202 Accepted` | Client ส่ง notification ซึ่งตามสเปกไม่ต้องมีคำตอบ Server จึงตอบ 202 ไม่ใช่ 200 |
+| `GET /mcp` | ช่องทางที่ Server ใช้ส่งข้อความกลับหาClient ได้เองตามสเปก Streamable HTTP |
+| `DELETE /mcp` → `Terminating session` | ปิด session อย่างเรียบร้อยเมื่อตอบคำถามเสร็จ ไม่ได้ปล่อยค้าง |
+
+**หนึ่งคำถามของผู้ใช้ = หนึ่ง session** เปิดตอนเริ่มตอบ ปิดตอนตอบจบ เห็นเป็นคู่ `Created` / `Terminating` ทุกครั้ง
+
+**🟧 ช่วงที่ 4 — ตอน tool ถูกเรียกจริง**
+
+```
+[tool] query_complaints {"metric": "count", "group_by": ["province"],
+                         "filters": {"year": [2564]}, "order_by": "count", "limit": 1}
+       SQL   SELECT province, COUNT(*) AS count FROM complaints
+             WHERE year IN (?) AND province IS NOT NULL GROUP BY province ...
+       ได้   1 แถว
+       เตือน ตัด 1324 เรื่องที่ไม่ระบุ province ออกจากผลลัพธ์ ต้องแจ้งผู้ใช้ด้วย
+       เตือน ผลถูกตัดเหลือ 1 กลุ่มตามค่า limit จากทั้งหมด 78 กลุ่ม
+             ถ้าคำถามต้องการครบ ให้เรียกใหม่โดยตั้ง limit อย่างน้อย 78        43 ms
+```
+
+| บรรทัด | อ่านว่าอย่างไร |
+| --- | --- |
+| `[tool] query_complaints {...}` | **tool name** กับ **tool argument** ที่โมเดลส่งมาจริง ไม่ใช่ที่เราคาดว่าโมเดลจะส่ง ดูบรรทัดนี้ก็รู้ทันทีว่าโมเดลเข้าใจคำถามผิดตรงไหน |
+| `SQL SELECT ...` | SQL ที่ประกอบขึ้นจาก argument ข้างบนและรันจริง **โมเดลไม่เคยเขียน SQL เอง** ส่งมาแค่พารามิเตอร์ |
+| `ได้ 1 แถว` | จำนวนแถวที่ฐานข้อมูลคืนมา เทียบกับ `limit` ที่โมเดลตั้งไว้ |
+| `เตือน ตัด 1324 เรื่องที่ไม่ระบุ province` | ข้อมูลจริงมีช่องว่าง `SQL` ตัดแถวที่ province เป็น `NULL` ทิ้ง เราจึงบังคับให้ส่งคำเตือนกลับไปเป็น input ของโมเดล เพื่อให้คำตอบสุดท้ายบอกผู้ใช้ด้วย |
+| `เตือน ผลถูกตัดเหลือ 1 กลุ่ม จากทั้งหมด 78 กลุ่ม` | โมเดลตั้ง `limit: 1` เอง ระบบจึงเตือนว่าผลไม่ครบและบอกตัวเลขที่ควรตั้ง นี่คือกลไก **ส่งผลที่ไม่ผ่านการกรองกลับเป็น input ให้โมเดลแก้เอง** |
+| `43 ms` | เวลาที่ใช้ทั้ง tool ตั้งแต่ตรวจค่าจนรัน SQL เสร็จ |
+
+คำเตือนสองบรรทัดนั้นไม่ได้ค้างอยู่ใน log เฉย ๆ แต่ถูกส่งกลับไปให้โมเดลและโผล่ในคำตอบบนหน้าเว็บจริง
+
+![คำเตือนโผล่ในคำตอบ](docs/images/web-answer-province.png)
+
+---
+
+#### สรุปว่าทำไมถึงต้องใช้ Docker ไม่ใช่รัน `python` เฉย ๆ
+
+| เหตุผล | ได้อะไร |
+| --- | --- |
+| แยก Client กับ Server เป็นคนละโปรเซส | ตรงตามสถาปัตยกรรมของมาตรฐาน MCP จริง ไม่ใช่เรียกฟังก์ชันกันเองแล้วอ้างว่าเป็น MCP |
+| `:ro` ตอน mount | ปิดการเขียนที่ระดับ kernel เป็นชั้นเดียวที่บั๊กในโค้ดเราข้ามไม่ได้ |
+| ฝังโมเดลและฟอนต์ลง image | รันซ้ำได้ผลเดิม ไม่ต้องต่อเน็ตตอนรัน และตัวอักษรไทยในกราฟไม่เพี้ยน |
+| `RAG_MODE` เป็น environment variable | สลับสามขาของการวัดผลด้วย `docker compose up -d mcp` ไม่ต้องแก้โค้ด |
+| `restart: unless-stopped` | ถ้า container ล้ม Docker ยกกลับมาเอง |
+
+---
 
 ### MCP SDK ทำหน้าที่อะไร
 

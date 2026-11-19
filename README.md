@@ -142,7 +142,7 @@
 
 ```mermaid
 flowchart TD
-    U["ผู้ใช้ถามเป็นภาษาไทย"] --> P["ประกอบข้อความที่ส่งให้โมเดล<br/>system prompt + ประวัติ + user prompt"]
+    U["ผู้ใช้ถามเป็นภาษาไทย"] --> P["ประกอบ complete prompt<br/>system prompt + user prompt"]
     P --> L{"LLM · gpt-4.1-mini"}
 
     L -->|"token ขาออกแบบที่ 1 · ข้อความ"| ANS["ตอบผู้ใช้ พร้อม SQL ที่ใช้จริง"]
@@ -163,9 +163,13 @@ flowchart TD
     ASK --> STOP
 ```
 
-### user prompt ไปรวมอยู่ตรงไหน
+### user prompt กับ system prompt รวมกันเป็น complete prompt ตรงไหน
 
-`agent.py` ประกอบ `messages` ทุกรอบเป็นลำดับเดิมเสมอ
+```
+system prompt  +  user prompt  =  complete prompt
+```
+
+**complete prompt คือทั้งก้อนที่ส่งให้ LLM** `agent.py` ประกอบมันขึ้นมาทุกรอบเป็นลำดับเดิมเสมอ
 
 ```python
 messages = [
@@ -176,10 +180,14 @@ messages = [
 ]
 ```
 
-**user prompt อยู่ต่อจาก system prompt เสมอ ไม่ย้ายไปท้ายสุด**
-สิ่งที่ยาวขึ้นเรื่อย ๆ คือผลของ tool ที่ต่อท้ายเข้าไปทีละรอบ
+สองบรรทัดแรกคือ complete prompt ของรอบแรก **user prompt อยู่ต่อจาก system prompt เสมอ
+ไม่ย้ายไปท้ายสุด** ตำแหน่งที่ 0 เป็น system prompt และตำแหน่งที่ 1 เป็น user prompt ทุกครั้ง
 
-แบบนี้ทำให้ย้อนดูได้ว่าโมเดลเห็นอะไรก่อนตัดสินใจ และไม่ต้องเดาว่า user prompt เดิมถูกดันไปอยู่ตรงไหน
+พอวนรอบต่อไป complete prompt จะยาวขึ้นเพราะผลของ tool ต่อท้ายเข้ามา
+แต่สองตำแหน่งแรกไม่ขยับ จึงย้อนดูได้เสมอว่าโมเดลเห็นอะไรก่อนตัดสินใจ
+และไม่ต้องเดาว่า user prompt เดิมถูกดันไปอยู่ตรงไหน
+
+complete prompt เต็มก้อนของทุกรอบถูกบันทึกลง Langfuse เปิดดูได้ว่ารอบไหนมีอะไรบ้าง
 
 ### token ขาออกมีสองประเภท
 
@@ -311,7 +319,7 @@ Web UI  port 8080                          แสดงคำตอบ SQL ก�
       |
       v
 Agent Core  agent.py                       ----HTTPS---->  OpenRouter
-  ประกอบ messages = system prompt + history + user prompt                 gpt-4.1-mini
+  ประกอบ complete prompt = system prompt + user prompt                 gpt-4.1-mini
   ตัดสินใจว่าจะเรียก tool ไหน                                function calling
   วนจนกว่าจะได้คำตอบ หรือครบ 8 รอบ
       |
@@ -337,14 +345,14 @@ complaints.db   mount แบบ :ro
 | ส่วน | เทคโนโลยี | หน้าที่ |
 | --- | --- | --- |
 | UI | เว็บใน container `web` | รับคำถาม แสดงคำตอบ SQL กราฟ และ trace |
-| Agent Core | Python + OpenAI client | ประกอบ system prompt กับ user prompt วนรอบเรียก tool ตัดสินใจหยุด |
+| Agent Core | Python + OpenAI client | ประกอบ complete prompt วนรอบเรียก tool ตัดสินใจหยุด |
 | LLM | `openai/gpt-4.1-mini` ผ่าน OpenRouter | เลือก tool และเขียนคำตอบ |
 | Tool layer | MCP SDK 2.x `MCPServer` | ประกาศ tool ตรวจ schema เสิร์ฟผ่าน Streamable HTTP |
 | ตรรกะ | Python ใน `tools/` | ตรวจค่า ประกอบ SQL คำนวณ วาดกราฟ |
 | ฐานข้อมูล | SQLite เปิดแบบ `mode=ro` | เก็บเรื่องร้องเรียน 42,806 แถว |
 | ค้นค่าภาษาไทย | `pythainlp` BM25 + `bge-reranker-v2-m3` | แปลงคำพูดคนเป็นค่าจริง |
 | กราฟความสัมพันธ์ | `networkx` | 271 node 1,903 edge |
-| Observability | Langfuse | เก็บ system prompt เต็ม tool call SQL และคะแนน |
+| Observability | Langfuse | เก็บ complete prompt เต็ม tool call SQL และคะแนน |
 | Deploy | Docker Compose | สอง service คือ `mcp` และ `web` |
 
 ### MCP SDK ทำหน้าที่อะไร
@@ -751,7 +759,7 @@ faithfulness ตรวจว่าตัวเลขทุกตัวในค�
 | ฐานข้อมูล | `complaints.db` 42,806 เรื่อง เปิดแบบ `mode=ro` |
 | วิธีคิดคะแนน | สูตรตายตัวใน [`eval/score.py`](eval/score.py) ไม่ใช้ LLM ตัดสิน |
 | เฉลย | [`eval/truth.py`](eval/truth.py) คำนวณจาก SQL ตอนรันทุกครั้ง ไม่ได้เขียนด้วยมือ |
-| เครื่องมือบันทึก | Langfuse คลาวด์ เก็บ system prompt เต็มและสูตรที่มาของคะแนน |
+| เครื่องมือบันทึก | Langfuse คลาวด์ เก็บ complete prompt เต็มและสูตรที่มาของคะแนน |
 
 ทั้งสามขารันต่อกันในวันเดียว ด้วยฐานข้อมูลชุดเดียวกันและโมเดลตัวเดียวกัน
 ตัวกันพลาดใน `run_eval` อ่าน `RAG_MODE` จาก MCP Server มาเทียบกับชื่อรอบทุกครั้ง
@@ -891,7 +899,7 @@ faithfulness ต่างออกไป ค่านิ่งทุกขาแ
 - [x] หน้าเว็บที่แสดงที่มาของทุกตัวเลข
 - [x] วัด correctness และ faithfulness ด้วยสูตรตายตัว
 - [x] บันทึกความแปรปรวนของการรันซ้ำ
-- [x] เก็บ system prompt เต็ม tool call และสูตรที่มาของคะแนนลง Langfuse
+- [x] เก็บ complete prompt เต็ม tool call และสูตรที่มาของคะแนนลง Langfuse
 
 ### จะทำต่อ
 

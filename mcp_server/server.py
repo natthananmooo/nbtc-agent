@@ -180,10 +180,15 @@ mcp = MCPServer(
 # decorator @mcp.tool() ลงทะเบียนฟังก์ชันเข้า server และสร้าง JSON Schema
 # จากชื่อฟังก์ชัน docstring และ type hint ให้เอง
 # docstring คือสิ่งที่ LLM อ่านเพื่อตัดสินใจว่าจะเรียก tool ไหน จึงเขียนยาวโดยตั้งใจ
+# tool name: resolve_filter_values
+# tool argument: user_phrase (บังคับ), field (ไม่บังคับ)
 # หน้าที่: แปลงคำที่ผู้ใช้พิมพ์เป็นค่าที่มีอยู่จริงในฐานข้อมูล พร้อมระดับความมั่นใจ
 # รับ: คำผู้ใช้ และชื่อคอลัมน์ถ้ารู้ · คืน: dict ที่มี confidence กับ use_in_filters
 @mcp.tool()
-def resolve_filter_values(user_phrase: str, field: str | None = None) -> dict:
+def resolve_filter_values(
+    user_phrase: str,  # tool argument · คำที่ผู้ใช้พิมพ์ เช่น AIS มือถือ ภาคเหนือ
+    field: str | None = None,  # tool argument · ชื่อคอลัมน์ถ้ารู้แน่ เว้นว่างจะค้นทุกคอลัมน์
+) -> dict:
     """แปลงคำที่ผู้ใช้พิมพ์ ให้เป็นค่าที่มีอยู่จริงในฐานข้อมูล สำหรับคอลัมน์ที่เป็นข้อความเท่านั้น
 
     ห้ามเรียกกับ year หรือ month เพราะเป็นตัวเลข ไม่ใช่ข้อความ
@@ -233,18 +238,20 @@ def resolve_filter_values(user_phrase: str, field: str | None = None) -> dict:
     return out
 
 
+# tool name: query_complaints
+# tool argument: metric, group_by, filters, date_from, date_to, order_by, limit (ไม่บังคับทั้งหมด)
 # หน้าที่: ประกอบ SQL จากพารามิเตอร์แล้วรันบนฐานข้อมูลที่เปิดแบบอ่านอย่างเดียว
 # LLM ไม่เคยเขียน SQL เอง ส่งมาแค่พารามิเตอร์ ซึ่งเป็นชั้นแรกของกลไกอ่านอย่างเดียว
 # รับ: metric, group_by, filters, ช่วงวันที่, order_by, limit · คืน: dict ที่มี rows, sql_used, warnings
 @mcp.tool()
 def query_complaints(
-    metric: str = "count",  # ค่าเริ่มต้นคือนับจำนวนเรื่อง
-    group_by: list[str] | str | None = None,  # รับทั้งลิสต์และสตริง เพราะโมเดลส่งมาทั้งสองแบบ
-    filters: dict | str | None = None,  # รับทั้ง dict และสตริง JSON ด้วยเหตุผลเดียวกัน
-    date_from: str | None = None,  # กรองจากวันรับเรื่อง
-    date_to: str | None = None,  # กรองถึงวันรับเรื่อง
-    order_by: str | None = None,  # เว้นว่างจะเรียงตามคอลัมน์ที่จัดกลุ่ม
-    limit: int = 100,  # กันผลลัพธ์ล้น ปรับได้ถึง 50,000
+    metric: str = "count",  # tool argument · count, avg_days_to_close หรือ share_pct
+    group_by: list[str] | str | None = None,  # tool argument · รับทั้งลิสต์และสตริง เพราะโมเดลส่งมาทั้งสองแบบ
+    filters: dict | str | None = None,  # tool argument · รับทั้ง dict และสตริง JSON ด้วยเหตุผลเดียวกัน
+    date_from: str | None = None,  # tool argument · กรองจากวันรับเรื่อง
+    date_to: str | None = None,  # tool argument · กรองถึงวันรับเรื่อง
+    order_by: str | None = None,  # tool argument · เว้นว่างจะเรียงตามคอลัมน์ที่จัดกลุ่ม
+    limit: int = 50000,  # tool argument · ตั้งเท่าเพดาน เพื่อไม่ให้ผลถูกตัดโดยผู้ใช้ไม่ได้สั่ง
 ) -> dict:
     """สืบค้นสถิติเรื่องร้องเรียนโทรคมนาคม แบบอ่านอย่างเดียว
 
@@ -272,7 +279,7 @@ def query_complaints(
                   หรือใส่ชื่อ metric เช่น count เพื่อเรียงจากมากไปน้อย
                   สำคัญ: ถ้าคำถามถามว่า "ปีไหนมากที่สุด" ต้องใส่ order_by=count
                   เพราะถ้าไม่ใส่ ระบบจะเรียงตามปีจากเก่าไปใหม่
-        limit: จำนวนแถวสูงสุด
+        limit: จำนวนกลุ่มสูงสุดที่คืนกลับ ค่าเริ่มต้นคือเพดาน 50000 จึงไม่ถูกตัด
     """
     t0 = time.time()
     try:
@@ -300,16 +307,18 @@ def query_complaints(
     return out
 
 
+# tool name: explore_relations
+# tool argument: value (บังคับ), field, to_field, mode, top_k (ไม่บังคับ)
 # หน้าที่: เดินกราฟความสัมพันธ์ที่สร้างจากฐานข้อมูล ตอบว่าค่าหนึ่งพบร่วมกับอะไรบ่อย
 # ใช้ตอนยังไม่รู้ว่าควรกรองด้วยอะไร ไม่ใช่ตัวที่เอาไปตอบตัวเลขให้ผู้ใช้
 # รับ: ค่า, คอลัมน์ต้นทาง, คอลัมน์ปลายทาง, โหมด, จำนวนสูงสุด · คืน: dict ที่มี lift และ share_pct
 @mcp.tool()
 def explore_relations(
-    value: str,  # ค่าจริงในฐานข้อมูล ต้องผ่าน resolve_filter_values มาก่อน
-    field: str | None = None,  # คอลัมน์ของค่านั้น เว้นว่างได้ ระบบจะหาให้
-    to_field: str | None = None,  # อยากดูไปยังคอลัมน์ไหน เว้นว่างจะคืนทุกคอลัมน์ที่เชื่อมถึง
-    mode: str = "related",  # related คือพบร่วมกันบ่อย similar คือรูปแบบปัญหาคล้ายกัน
-    top_k: int = 8,  # จำนวนรายการสูงสุดต่อคอลัมน์
+    value: str,  # tool argument · ค่าจริงในฐานข้อมูล ต้องผ่าน resolve_filter_values มาก่อน
+    field: str | None = None,  # tool argument · คอลัมน์ของค่านั้น เว้นว่างได้ ระบบจะหาให้
+    to_field: str | None = None,  # tool argument · อยากดูไปยังคอลัมน์ไหน เว้นว่างจะคืนทุกคอลัมน์
+    mode: str = "related",  # tool argument · related คือพบร่วมกันบ่อย similar คือรูปแบบคล้ายกัน
+    top_k: int = 8,  # tool argument · จำนวนรายการสูงสุดต่อคอลัมน์
 ) -> dict:
     """ดูว่าค่าหนึ่งเกี่ยวข้องกับอะไรในข้อมูลจริง ใช้ตอนยังไม่รู้ว่าควรกรองด้วยอะไร
 
@@ -361,15 +370,17 @@ def explore_relations(
     return out
 
 
+# tool name: analyze_results
+# tool argument: result_id, rows, question, mode (ไม่บังคับทั้งหมด แต่ต้องมี result_id หรือ rows อย่างใดอย่างหนึ่ง)
 # หน้าที่: คำนวณสถิติจากแถวที่ query_complaints ดึงมาแล้ว ไม่ไปหาข้อมูลใหม่
 # แยกออกมาเป็น tool ต่างหาก เพื่อไม่ให้โมเดลคำนวณเองแล้วได้เลขที่สืบที่มาไม่ได้
 # รับ: result_id หรือ rows, คำถามเดิม, โหมด · คืน: dict ที่มี findings และ caveats
 @mcp.tool()
 def analyze_results(
-    result_id: str | None = None,  # ทางที่ถูกต้อง อ้างผลลัพธ์ด้วยรหัส
-    rows: list[dict] | None = None,  # ทางสำรอง ส่งแถวมาเอง
-    question: str = "",  # คำถามเดิมของผู้ใช้ ใช้เลือกมุมที่จะสรุป
-    mode: str = "summary",  # summary, trend, compare หรือ share
+    result_id: str | None = None,  # tool argument · ทางที่ถูกต้อง อ้างผลลัพธ์ด้วยรหัส
+    rows: list[dict] | None = None,  # tool argument · ทางสำรอง ส่งแถวมาเอง
+    question: str = "",  # tool argument · คำถามเดิมของผู้ใช้ ใช้เลือกมุมที่จะสรุป
+    mode: str = "summary",  # tool argument · summary, trend, compare หรือ share
 ) -> dict:
     """สรุปตัวเลขจากผลลัพธ์ของ query_complaints ด้วยการคำนวณ ไม่ใช่การประมาณ
 
@@ -408,17 +419,19 @@ def analyze_results(
     return out
 
 
+# tool name: render_chart
+# tool argument: chart_type, x, y, title (บังคับ), result_id, rows, filename (ไม่บังคับ)
 # หน้าที่: วาดกราฟหนึ่งรูปจากผลลัพธ์ที่ดึงมาแล้ว คืน path ของไฟล์ภาพ
 # รับ: ชนิดกราฟ, แกน x, แกน y, หัวกราฟ, result_id หรือ rows, ชื่อไฟล์ · คืน: dict ที่มี image_path
 @mcp.tool()
 def render_chart(
-    chart_type: str,  # bar, barh, line หรือ pie
-    x: str,  # ชื่อคอลัมน์หมวดหมู่
-    y: str,  # ชื่อคอลัมน์ตัวเลข
-    title: str,  # หัวกราฟ
-    result_id: str | None = None,  # ทางที่ถูกต้อง อ้างผลลัพธ์ด้วยรหัส
-    rows: list[dict] | None = None,  # ทางสำรอง ส่งแถวมาเอง
-    filename: str | None = None,  # เว้นว่างระบบตั้งชื่อให้เอง
+    chart_type: str,  # tool argument · bar, barh, line หรือ pie
+    x: str,  # tool argument · ชื่อคอลัมน์หมวดหมู่
+    y: str,  # tool argument · ชื่อคอลัมน์ตัวเลข
+    title: str,  # tool argument · หัวกราฟ
+    result_id: str | None = None,  # tool argument · อ้างผลลัพธ์ด้วยรหัส
+    rows: list[dict] | None = None,  # tool argument · ทางสำรอง ส่งแถวมาเอง
+    filename: str | None = None,  # tool argument · เว้นว่างระบบตั้งชื่อให้เอง
 ) -> dict:
     """วาดกราฟจากผลลัพธ์ แล้วคืน path ของไฟล์ภาพ
 
@@ -462,14 +475,16 @@ def render_chart(
     return out
 
 
+# tool name: generate_dashboard
+# tool argument: title, panels (บังคับ), notes (ไม่บังคับ)
 # หน้าที่: รวมหลายกราฟเป็นหน้า HTML เดียว พร้อมแสดง SQL ใต้แต่ละแผง
 # แผงที่อ้าง result_id ผิดจะถูกข้ามไปแต่ยังสร้างหน้าให้ ถ้าเหลืออย่างน้อยหนึ่งแผงที่ใช้ได้
 # รับ: หัวข้อ, รายการแผง, ข้อความสรุป · คืน: dict ที่มี html_path และ panels_drawn
 @mcp.tool()
 def generate_dashboard(
-    title: str,  # หัวข้อหน้าสรุป
-    panels: list[dict],  # แต่ละแผงมี result_id, chart_type, x, y, title
-    notes: list[str] | None = None,  # ข้อความสรุปสั้น ๆ ใต้หัวข้อ
+    title: str,  # tool argument · หัวข้อหน้าสรุป
+    panels: list[dict],  # tool argument · แต่ละแผงมี result_id, chart_type, x, y, title
+    notes: list[str] | None = None,  # tool argument · ข้อความสรุปสั้น ๆ ใต้หัวข้อ
 ) -> dict:
     """รวมหลายกราฟเป็นหน้าสรุปเดียว ได้ไฟล์ HTML ที่ฝังรูปไว้ในตัว
 
@@ -534,6 +549,7 @@ def generate_dashboard(
 # รายการค่าที่มีจริงในฐานข้อมูล ส่งให้ agent เอาไปใส่ system prompt
 # เป็น resource ไม่ใช่ tool เพราะเป็นข้อมูลบริบท ไม่ใช่การกระทำ
 # agent จึงไม่ต้องเข้าถึงไฟล์ฐานข้อมูลเองเลย ซึ่งเป็นจุดสำคัญด้านความปลอดภัย
+# resource name: schema://values  (เป็น resource ไม่ใช่ tool จึงไม่มี tool argument)
 # หน้าที่: ประกอบข้อความอธิบายโครงสร้างตารางและค่าที่มีอยู่จริงทุกคอลัมน์
 # รับ: ไม่รับพารามิเตอร์ · คืน: ข้อความหลายบรรทัด ที่ agent เอาไปต่อใน system prompt
 @mcp.resource("schema://values", mime_type="text/plain")

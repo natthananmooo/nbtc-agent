@@ -23,7 +23,10 @@ MIN_DAYS = 0
 #   provider, problem_group, year 1,691 กลุ่ม
 #   province, year                1,168 กลุ่ม
 # ตั้ง 50000 ซึ่งมากกว่าหลายเท่า คำถามปกติจึงไม่มีทางชน
-MAX_LIMIT = 50000          # days_to_close ติดลบ ตัดออกตอนคำนวณค่าเฉลี่ย
+# เพดานสูงสุดของ limit และเป็นค่าเริ่มต้นด้วย
+# ตั้งเท่ากันเพื่อไม่ให้ผลถูกตัดโดยที่ผู้ใช้ไม่ได้สั่ง
+# กลุ่มที่มากที่สุดเท่าที่วัดได้คือ district กับ year รวม 4,942 กลุ่ม ยังห่างเพดานมาก
+MAX_LIMIT = 50000
 NULL_WARN_AT = 0.05   # คอลัมน์ที่ใช้กรองแล้วว่างเกินนี้ ต้องเตือน
 
 
@@ -77,7 +80,7 @@ def query_complaints(
     date_from: str | None = None,
     date_to: str | None = None,
     order_by: str | None = None,
-    limit: int = 100,
+    limit: int = MAX_LIMIT,
 ) -> dict:
     """
     metric    : count | avg_days_to_close | share_pct

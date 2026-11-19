@@ -343,6 +343,75 @@ client = OpenAI(api_key=key, base_url="https://openrouter.ai/api/v1")
 ทั้ง `openai/gpt-4.1-mini`, `qwen/qwen-2.5-72b-instruct` และ `google/gemini-*`
 จึงอ่านผลด้วย `resp.choices[0].message` เหมือนกันหมด
 
+#### endpoint คืออะไร และของเรามีกี่ตัว
+
+**endpoint คือที่อยู่ปลายทางที่โปรแกรมยิงคำขอไป บวกกับกติกาว่าส่งอะไรไปแล้วได้อะไรกลับ**
+ส่วนที่เป็นที่อยู่คือ URL ส่วนที่เป็นกติกาคือ schema ซึ่งเป็นตัวที่ SDK ต้องเข้าใจ
+
+โครงงานนี้มี endpoint อยู่สี่ตัว แบ่งเป็นสองพวก
+
+**พวกที่เราไปเรียกคนอื่น** สองตัวนี้ schema คนละแบบ จึงต้องใช้ SDK คนละตัว
+
+| endpoint | ใครเรียก | schema | SDK |
+| --- | --- | --- | --- |
+| `https://openrouter.ai/api/v1/chat/completions` | `agent.py` | OpenAI-compatible | `openai` |
+| `http://mcp:8000/mcp` | `agent.py` | JSON-RPC 2.0 ตามมาตรฐาน MCP | `mcp` |
+
+**พวกที่เราเปิดให้คนอื่นเรียก** คือหน้าเว็บของเราเอง ไม่เกี่ยวกับ SDK
+
+| endpoint | ทำอะไร |
+| --- | --- |
+| `GET /` | ส่งหน้าเว็บ |
+| `GET /api/health` | เช็กว่าระบบยังทำงาน |
+| `POST /api/ask` | รับคำถามจากหน้าเว็บแล้วส่งเข้า agent |
+
+##### endpoint ของ LLM
+
+ในโค้ดเราเขียนแค่ `base_url` ส่วน path ที่เหลือ SDK ต่อให้เอง
+
+```python
+client = OpenAI(api_key=key, base_url="https://openrouter.ai/api/v1")
+client.chat.completions.create(model=MODEL, messages=messages, tools=oa_tools)
+# endpoint จริงที่ถูกยิงคือ https://openrouter.ai/api/v1/chat/completions
+```
+
+SDK ชื่อ `openai` แต่ไม่ได้ผูกกับบริษัท OpenAI มันผูกกับ **รูปร่างของ endpoint นี้**
+คือส่ง `messages` ไป แล้วได้ `choices` · `finish_reason` · `usage` กลับมา
+OpenRouter ลอกรูปร่างนี้มา SDK จึงใช้ได้ และเป็นเหตุผลที่เรายิง
+`openai/gpt-4.1-mini`, `qwen/qwen-2.5-72b-instruct` และ `google/gemini-*`
+ผ่าน client ตัวเดียวกันได้ โดยเปลี่ยนแค่ค่า `model`
+
+ถ้าเปลี่ยน `base_url` ไปที่ `https://api.anthropic.com/v1/messages` ตรง ๆ SDK ตัวนี้จะพัง
+เพราะ endpoint นั้นคืน `content` กับ `stop_reason` ไม่ใช่ `choices` กับ `finish_reason`
+
+##### endpoint ของ MCP
+
+```python
+MCP_URL = os.environ.get("MCP_URL", "http://127.0.0.1:8000/mcp")
+```
+
+MCP ทั้งโปรโตคอลใช้ **endpoint เดียว** คือ `/mcp` แล้วแยกงานด้วย HTTP method กับเนื้อ JSON-RPC ข้างใน
+
+| method ที่ยิงไป `/mcp` | ใช้ทำอะไร |
+| --- | --- |
+| `POST` | ส่ง request เช่น `initialize` · `tools/list` · `tools/call` · `resources/read` |
+| `POST` ที่เป็น notification | ไม่ต้องรอคำตอบ ได้ `202 Accepted` |
+| `GET` | ช่องที่ server ส่งข้อความกลับมาหา client ได้เอง |
+| `DELETE` | ปิด session |
+
+ใน `docker-compose.yml` ค่านี้ถูกตั้งเป็น `http://mcp:8000/mcp` โดย `mcp` คือ**ชื่อ service ใน Compose
+ไม่ใช่ชื่อโดเมนบนอินเทอร์เน็ต** Docker แปลงให้เป็น IP ภายในซึ่งคือ `172.21.0.x` ที่เห็นใน log
+
+หลักฐานว่า `/mcp` เป็น endpoint เดียวจริง ดูได้จาก log ตอนมีคนเปิด `localhost:8000` ด้วยเบราว์เซอร์
+
+```
+INFO:  192.168.65.1:62835 - "GET / HTTP/1.1" 404 Not Found
+INFO:  192.168.65.1:62835 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+```
+
+ได้ `404` เพราะเซิร์ฟเวอร์ตัวนั้นไม่มี endpoint อื่นนอกจาก `/mcp` ไม่ใช่ error
+แต่เป็นการยืนยันว่า MCP Server ไม่ใช่เว็บไซต์ หน้าเว็บอยู่ที่พอร์ต 8080
+
 #### FastMCP กับ MCPServer คือตัวเดียวกัน
 
 ![FastMCP กับ MCPServer คือตัวเดียวกัน](docs/images/fastmcp-vs-mcpserver.png)

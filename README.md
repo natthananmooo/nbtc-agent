@@ -345,6 +345,8 @@ client = OpenAI(api_key=key, base_url="https://openrouter.ai/api/v1")
 
 #### FastMCP กับ MCPServer คือตัวเดียวกัน
 
+![FastMCP กับ MCPServer คือตัวเดียวกัน](docs/images/fastmcp-vs-mcpserver.png)
+
 โครงงานนี้เขียนว่า `MCPServer` ไม่ใช่ `FastMCP` ซึ่ง**ไม่ได้แปลว่าใช้คนละอย่าง**
 `FastMCP` คือชื่อเดิมของคลาสนี้ใน MCP Python SDK รุ่น 1.x พอขึ้นรุ่น 2.x ถูกเปลี่ยนชื่อเป็น `MCPServer`
 ตัว SDK เองบอกไว้ในข้อความ error ตอน import แบบเก่า
@@ -357,8 +359,18 @@ and other APIs changed; see the migration guide ... or pin 'mcp<2' to keep runni
 ```
 
 ท่าเขียนเหมือนเดิมทุกอย่าง ทั้ง `@mcp.tool()` การสร้าง schema จาก type hint กับ docstring
-และ `mcp.run(transport=...)` เปลี่ยนแค่ชื่อคลาสกับ path ที่ import
-โครงงานนี้ตรึงไว้ที่ `mcp>=2.3.0` ใน `mcp_server/requirements.txt`
+และ `mcp.run(transport=...)` โครงงานนี้ตรึงไว้ที่ `mcp>=2.3.0` ใน `mcp_server/requirements.txt`
+
+สิ่งที่ต่างจริง ๆ มีสองอย่าง คือชื่อคลาสกับ path ที่ import และตำแหน่งของ `host` กับ `port`
+ซึ่งรุ่น 1.x ใส่ตอนสร้าง ส่วนรุ่น 2.x ย้ายไปใส่ตอน `run()` ตรวจได้จาก signature ของจริง
+
+```python
+>>> inspect.signature(MCPServer.__init__)
+(self, name=None, title=None, description=None, instructions=None, ...)   # ไม่มี host, port
+
+>>> inspect.signature(MCPServer.run)
+(self, transport='stdio', **kwargs)                                       # host, port เข้าทางนี้
+```
 
 #### ตรงกับเช็กลิสต์ของวิชา
 

@@ -345,6 +345,8 @@ client = OpenAI(api_key=key, base_url="https://openrouter.ai/api/v1")
 
 #### endpoint คืออะไร และของเรามีกี่ตัว
 
+![endpoint ของโครงงานนี้ ตอนทำงานจริง](docs/images/endpoints.png)
+
 **endpoint คือที่อยู่ปลายทางที่โปรแกรมยิงคำขอไป บวกกับกติกาว่าส่งอะไรไปแล้วได้อะไรกลับ**
 ส่วนที่เป็นที่อยู่คือ URL ส่วนที่เป็นกติกาคือ schema ซึ่งเป็นตัวที่ SDK ต้องเข้าใจ
 
@@ -411,6 +413,28 @@ INFO:  192.168.65.1:62835 - "GET /favicon.ico HTTP/1.1" 404 Not Found
 
 ได้ `404` เพราะเซิร์ฟเวอร์ตัวนั้นไม่มี endpoint อื่นนอกจาก `/mcp` ไม่ใช่ error
 แต่เป็นการยืนยันว่า MCP Server ไม่ใช่เว็บไซต์ หน้าเว็บอยู่ที่พอร์ต 8080
+
+##### หลักฐานว่าแต่ละ endpoint ทำงานจริง
+
+| endpoint | ภาพหลักฐาน | เห็นอะไร |
+| --- | --- | --- |
+| `POST /mcp` | [log ของ nbtc-mcp](#อ่าน-log-ของ-nbtc-mcp) | `POST 200` · `POST 202 Accepted` · `GET` · `DELETE` ครบวงจร session พร้อมบรรทัด `[tool] query_complaints` |
+| `POST /api/ask` | ![คำตอบบนหน้าเว็บ](docs/images/web-answer-province.png) | คำตอบขึ้นบนหน้าเว็บพร้อมคำเตือนที่ tool ส่งกลับมา แปลว่า endpoint นี้ทำงานครบเส้นทาง |
+| `POST /chat/completions` | [trace ใน Langfuse](#วิธีวัด) | complete prompt · reasoning · tool call และจำนวน token ทุกรอบ |
+| `GET /` ที่พอร์ต 8000 | [log ของ nbtc-mcp](#อ่าน-log-ของ-nbtc-mcp) | `404 Not Found` ซึ่งยืนยันว่า MCP Server มี endpoint เดียวคือ `/mcp` |
+
+ถ้าอยากเช็กด้วยตัวเองว่าทั้งสอง container ต่อกันติดไหม เปิด `http://localhost:8080/api/health`
+endpoint นี้จะไป `list_tools()` กับ MCP Server จริง **ถ้าได้ชื่อ tool กลับมาครบ 6 ตัว แปลว่าเส้นทางทั้งหมดใช้งานได้**
+
+```bash
+curl -s http://localhost:8080/api/health
+```
+
+```json
+{"ok": true, "model": "openai/gpt-4.1-mini", "langfuse": true,
+ "tools": ["resolve_filter_values", "explore_relations", "query_complaints",
+           "analyze_results", "render_chart", "generate_dashboard"]}
+```
 
 #### FastMCP กับ MCPServer คือตัวเดียวกัน
 

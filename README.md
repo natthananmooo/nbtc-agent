@@ -354,6 +354,122 @@ complaints.db   mount แบบ :ro
 งานนี้ใช้ MCP SDK รุ่น 2.x คลาสชื่อ `MCPServer` เราเขียนแค่ฟังก์ชัน Python แล้วติด `@mcp.tool()`
 SDK สร้าง JSON Schema จาก type hint และ docstring ให้เอง และตอบ method ของโปรโตคอลให้ครบ
 
+### ตรงตามมาตรฐาน MCP ตรงไหน
+
+[สถาปัตยกรรม MCP](https://modelcontextprotocol.io/specification/2025-06-18/architecture)
+แบ่งเป็นสามบทบาท โครงการนี้แยกครบทั้งสาม และอยู่คนละโปรเซสจริง ไม่ใช่เรียกฟังก์ชันกันเองในโปรเซสเดียว
+
+| บทบาทตามมาตรฐาน | ของเรา | ทำอะไร |
+| --- | --- | --- |
+| **Host** | `web/app.py` | ถือการเชื่อมต่อ LLM ถือประวัติบทสนทนา เปิดและปิด session |
+| **Client** | `agent.py` | `ClientSession` คุยกับ server ด้วยโปรโตคอล หนึ่ง client ต่อหนึ่ง server |
+| **Server** | `mcp_server/server.py` | ประกาศ 6 tool กับ 1 resource เสิร์ฟที่ `:8000/mcp` ใน container แยก |
+
+ฝั่ง client ใช้ของจาก SDK ตรง ๆ ไม่ได้เขียน HTTP เอง
+
+```python
+from mcp import ClientSession
+from mcp.client.streamable_http import streamable_http_client
+
+async with streamable_http_client(MCP_URL) as (read, write):
+    async with ClientSession(read, write) as s:
+        await s.initialize()                        # จับมือและแลก capability
+
+tools = (await session.list_tools()).tools          # ค้นหา tool จาก server ตอนรัน
+res   = await session.read_resource("schema://values")
+result = await session.call_tool(name, args)        # เรียกผ่านโปรโตคอล
+```
+
+**จุดที่พิสูจน์ว่าเป็นโปรโตคอลจริง** คือ `list_tools()` — agent ไม่ได้ฝังรายชื่อ tool ไว้ในโค้ด
+แต่ถาม server ตอนรันว่ามี tool อะไรบ้าง schema หน้าตายังไง แล้วค่อยแปลงเป็นรูปแบบที่ LLM เข้าใจ
+เพิ่ม tool ใหม่ที่ฝั่ง server แล้ว agent เห็นทันทีโดยไม่ต้องแก้โค้ดฝั่ง client
+
+#### ลำดับตามแผนภาพมาตรฐาน
+
+| ขั้นตอนในมาตรฐาน | ของเรา |
+| --- | --- |
+| Initialize client | Host เปิด session ผ่าน `agent.open_session()` |
+| Initialize session with capabilities | `await s.initialize()` |
+| Respond with supported capabilities | SDK จัดการให้ |
+| Client Requests · `tools/list` `resources/read` | `list_tools()` และ `read_resource()` ตอนเริ่มทุกรอบ |
+| Client Requests · `tools/call` | `call_tool()` ทุกครั้งที่ LLM ขอเรียกเครื่องมือ |
+| Terminate · End session | ปิดเมื่อออกจาก context manager |
+
+#### ส่วนของมาตรฐานที่ไม่ได้ใช้
+
+| ความสามารถ | ใช้ไหม | เหตุผล |
+| --- | --- | --- |
+| Server Requests · sampling | ไม่ใช้ | server ไม่เคยขอให้ client รันโมเดลให้ ทุก tool คำนวณเองจบในตัว |
+| Notifications · resource updates | ไม่ใช้ | ฐานข้อมูลอ่านอย่างเดียว ไม่มีการเปลี่ยนระหว่าง session |
+| Elicitation · ขอข้อมูลเพิ่มจากผู้ใช้ | ไม่ใช้ | การถามกลับทำผ่าน `confidence` ที่ tool คืนมา แล้ว LLM เป็นคนถามเอง |
+
+ทั้งสามอย่างเป็นความสามารถที่มาตรฐานระบุว่าเลือกใช้ได้ ไม่ใช่ข้อบังคับ
+
+### รายการ tool และพารามิเตอร์ทั้งหมด
+
+ทั้งหมดนี้คือสิ่งที่ `tools/list` คืนกลับมาให้ agent เห็น
+
+**`resolve_filter_values`** · แปลงคำผู้ใช้เป็นค่าจริงในฐานข้อมูล
+
+| พารามิเตอร์ | ชนิด | ค่าเริ่มต้น | ความหมาย |
+| --- | --- | --- | --- |
+| `user_phrase` | `str` | **ต้องใส่** | คำที่ผู้ใช้พิมพ์ เช่น AIS, มือถือ, ภาคเหนือ |
+| `field` | `str` หรือ `null` | `null` | ระบุคอลัมน์ถ้ารู้แน่ เช่น `provider` `service_type` `problem_group` `region` `province` `district` `channel` `status` |
+
+**`query_complaints`** · ประกอบ SQL แล้วรันแบบอ่านอย่างเดียว
+
+| พารามิเตอร์ | ชนิด | ค่าเริ่มต้น | ความหมาย |
+| --- | --- | --- | --- |
+| `metric` | `str` | `count` | `count` · `avg_days_to_close` · `share_pct` |
+| `group_by` | `list[str]` หรือ `str` | `null` | คอลัมน์ที่จัดกลุ่ม เช่น `["year"]` `["province"]` |
+| `filters` | `dict` หรือ `str` | `null` | เช่น `{"year": [2564], "service_type": ["อินเทอร์เน็ต"]}` |
+| `date_from` | `str` | `null` | วันเริ่ม `YYYY-MM-DD` กรองจากวันรับเรื่อง |
+| `date_to` | `str` | `null` | วันสิ้นสุด `YYYY-MM-DD` |
+| `order_by` | `str` | `null` | ชื่อคอลัมน์เรียงน้อยไปมาก หรือชื่อ metric เรียงมากไปน้อย |
+| `limit` | `int` | `100` | จำนวนแถวสูงสุด ไม่เกิน 50,000 |
+
+**`explore_relations`** · เดินกราฟความสัมพันธ์
+
+| พารามิเตอร์ | ชนิด | ค่าเริ่มต้น | ความหมาย |
+| --- | --- | --- | --- |
+| `value` | `str` | **ต้องใส่** | ค่าจริงในฐานข้อมูล |
+| `field` | `str` หรือ `null` | `null` | คอลัมน์ของค่านั้น |
+| `to_field` | `str` หรือ `null` | `null` | อยากดูความสัมพันธ์ไปยังคอลัมน์ไหน เว้นว่างได้ |
+| `mode` | `str` | `related` | `related` พบร่วมกันบ่อย · `similar` รูปแบบปัญหาคล้ายกัน |
+| `top_k` | `int` | `8` | จำนวนรายการสูงสุดต่อคอลัมน์ |
+
+**`analyze_results`** · คำนวณสถิติจากแถวที่ดึงมาแล้ว
+
+| พารามิเตอร์ | ชนิด | ค่าเริ่มต้น | ความหมาย |
+| --- | --- | --- | --- |
+| `result_id` | `str` หรือ `null` | `null` | รหัสผลลัพธ์จาก `query_complaints` เช่น `r1` |
+| `rows` | `list[dict]` หรือ `null` | `null` | ใส่แทน `result_id` ได้ |
+| `question` | `str` | `""` | คำถามเดิมของผู้ใช้ |
+| `mode` | `str` | `summary` | `summary` · `trend` · `compare` · `share` |
+
+**`render_chart`** · วาดกราฟหนึ่งรูป
+
+| พารามิเตอร์ | ชนิด | ค่าเริ่มต้น | ความหมาย |
+| --- | --- | --- | --- |
+| `chart_type` | `str` | **ต้องใส่** | `bar` · `barh` · `line` · `pie` ไม่มีสามมิติ |
+| `x` | `str` | **ต้องใส่** | ชื่อคอลัมน์หมวดหมู่ เช่น `province` |
+| `y` | `str` | **ต้องใส่** | ชื่อคอลัมน์ตัวเลข เช่น `count` |
+| `title` | `str` | **ต้องใส่** | หัวกราฟ |
+| `result_id` | `str` หรือ `null` | `null` | รหัสผลลัพธ์จาก `query_complaints` |
+| `rows` | `list[dict]` หรือ `null` | `null` | ใส่แทน `result_id` ได้ |
+| `filename` | `str` หรือ `null` | `null` | ตั้งชื่อไฟล์เองได้ |
+
+**`generate_dashboard`** · รวมหลายกราฟเป็นหน้า HTML เดียว
+
+| พารามิเตอร์ | ชนิด | ค่าเริ่มต้น | ความหมาย |
+| --- | --- | --- | --- |
+| `title` | `str` | **ต้องใส่** | หัวข้อหน้าสรุป |
+| `panels` | `list[dict]` | **ต้องใส่** | แต่ละแผงมี `result_id` `chart_type` `x` `y` `title` |
+| `notes` | `list[str]` หรือ `null` | `null` | ข้อความสรุปสั้น ๆ ใต้หัวข้อ |
+
+**resource `schema://values`** · ไม่มีพารามิเตอร์ คืนรายการค่าจริงทุกคอลัมน์พร้อมจำนวนเรื่อง
+และช่วงปีที่ฐานข้อมูลมี ให้โมเดลอ่านเป็นบริบทตั้งแต่ต้นรอบ
+
 ### กลไกอ่านอย่างเดียว 4 ชั้น
 
 | ชั้น | กลไก | ป้องกันอะไร |

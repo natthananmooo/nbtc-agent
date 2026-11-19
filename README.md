@@ -142,7 +142,7 @@
 
 ```mermaid
 flowchart TD
-    U["ผู้ใช้ถามเป็นภาษาไทย"] --> P["ประกอบ prompt<br/>system + ประวัติ + ข้อความผู้ใช้"]
+    U["ผู้ใช้ถามเป็นภาษาไทย"] --> P["ประกอบข้อความที่ส่งให้โมเดล<br/>system prompt + ประวัติ + user prompt"]
     P --> L{"LLM · gpt-4.1-mini"}
 
     L -->|"token ขาออกแบบที่ 1 · ข้อความ"| ANS["ตอบผู้ใช้ พร้อม SQL ที่ใช้จริง"]
@@ -163,23 +163,23 @@ flowchart TD
     ASK --> STOP
 ```
 
-### ข้อความของผู้ใช้ไปรวมอยู่ใน prompt ตรงไหน
+### user prompt ไปรวมอยู่ตรงไหน
 
 `agent.py` ประกอบ `messages` ทุกรอบเป็นลำดับเดิมเสมอ
 
 ```python
 messages = [
-    {"role": "system",    "content": system_prompt},   # กติกา + รายการค่าจาก schema://values
-    {"role": "user",      "content": question},        # ข้อความผู้ใช้ ต่อท้าย system เสมอ
+    {"role": "system",    "content": system_prompt},   # system prompt · กติกา + ค่าจาก schema://values
+    {"role": "user",      "content": question},        # user prompt · ต่อท้าย system prompt เสมอ
     {"role": "assistant", "tool_calls": [...]},        # สิ่งที่โมเดลขอเรียก
     {"role": "tool",      "content": result},          # ผลที่ tool คืนมา ต่อท้ายไปเรื่อย ๆ
 ]
 ```
 
-**ข้อความของผู้ใช้อยู่ต่อจาก system prompt เสมอ ไม่ย้ายไปท้ายสุด**
+**user prompt อยู่ต่อจาก system prompt เสมอ ไม่ย้ายไปท้ายสุด**
 สิ่งที่ยาวขึ้นเรื่อย ๆ คือผลของ tool ที่ต่อท้ายเข้าไปทีละรอบ
 
-แบบนี้ทำให้ย้อนดูได้ว่าโมเดลเห็นอะไรก่อนตัดสินใจ และไม่ต้องเดาว่าคำถามเดิมถูกดันไปอยู่ตรงไหน
+แบบนี้ทำให้ย้อนดูได้ว่าโมเดลเห็นอะไรก่อนตัดสินใจ และไม่ต้องเดาว่า user prompt เดิมถูกดันไปอยู่ตรงไหน
 
 ### token ขาออกมีสองประเภท
 
@@ -275,7 +275,7 @@ MAX_STEPS = int(os.environ.get("AGENT_MAX_STEPS", "8"))
 
 ### การตัดสินใจถามกลับ
 
-`resolve_filter_values` คืน `confidence` สามระดับ และ prompt กำหนดว่าต้องทำอะไรกับแต่ละระดับ
+`resolve_filter_values` คืน `confidence` สามระดับ และ system prompt กำหนดว่าต้องทำอะไรกับแต่ละระดับ
 
 | `confidence` | ความหมาย | agent ต้องทำ |
 | --- | --- | --- |
@@ -311,7 +311,7 @@ Web UI  port 8080                          แสดงคำตอบ SQL ก�
       |
       v
 Agent Core  agent.py                       ----HTTPS---->  OpenRouter
-  ประกอบ messages = system + history + user                 gpt-4.1-mini
+  ประกอบ messages = system prompt + history + user prompt                 gpt-4.1-mini
   ตัดสินใจว่าจะเรียก tool ไหน                                function calling
   วนจนกว่าจะได้คำตอบ หรือครบ 8 รอบ
       |
@@ -337,14 +337,14 @@ complaints.db   mount แบบ :ro
 | ส่วน | เทคโนโลยี | หน้าที่ |
 | --- | --- | --- |
 | UI | เว็บใน container `web` | รับคำถาม แสดงคำตอบ SQL กราฟ และ trace |
-| Agent Core | Python + OpenAI client | ประกอบ prompt วนรอบเรียก tool ตัดสินใจหยุด |
+| Agent Core | Python + OpenAI client | ประกอบ system prompt กับ user prompt วนรอบเรียก tool ตัดสินใจหยุด |
 | LLM | `openai/gpt-4.1-mini` ผ่าน OpenRouter | เลือก tool และเขียนคำตอบ |
 | Tool layer | MCP SDK 2.x `MCPServer` | ประกาศ tool ตรวจ schema เสิร์ฟผ่าน Streamable HTTP |
 | ตรรกะ | Python ใน `tools/` | ตรวจค่า ประกอบ SQL คำนวณ วาดกราฟ |
 | ฐานข้อมูล | SQLite เปิดแบบ `mode=ro` | เก็บเรื่องร้องเรียน 42,806 แถว |
 | ค้นค่าภาษาไทย | `pythainlp` BM25 + `bge-reranker-v2-m3` | แปลงคำพูดคนเป็นค่าจริง |
 | กราฟความสัมพันธ์ | `networkx` | 271 node 1,903 edge |
-| Observability | Langfuse | เก็บ prompt เต็ม tool call SQL และคะแนน |
+| Observability | Langfuse | เก็บ system prompt เต็ม tool call SQL และคะแนน |
 | Deploy | Docker Compose | สอง service คือ `mcp` และ `web` |
 
 ### MCP SDK ทำหน้าที่อะไร
@@ -751,7 +751,7 @@ faithfulness ตรวจว่าตัวเลขทุกตัวในค�
 | ฐานข้อมูล | `complaints.db` 42,806 เรื่อง เปิดแบบ `mode=ro` |
 | วิธีคิดคะแนน | สูตรตายตัวใน [`eval/score.py`](eval/score.py) ไม่ใช้ LLM ตัดสิน |
 | เฉลย | [`eval/truth.py`](eval/truth.py) คำนวณจาก SQL ตอนรันทุกครั้ง ไม่ได้เขียนด้วยมือ |
-| เครื่องมือบันทึก | Langfuse คลาวด์ เก็บ prompt เต็มและสูตรที่มาของคะแนน |
+| เครื่องมือบันทึก | Langfuse คลาวด์ เก็บ system prompt เต็มและสูตรที่มาของคะแนน |
 
 ทั้งสามขารันต่อกันในวันเดียว ด้วยฐานข้อมูลชุดเดียวกันและโมเดลตัวเดียวกัน
 ตัวกันพลาดใน `run_eval` อ่าน `RAG_MODE` จาก MCP Server มาเทียบกับชื่อรอบทุกครั้ง
@@ -891,7 +891,7 @@ faithfulness ต่างออกไป ค่านิ่งทุกขาแ
 - [x] หน้าเว็บที่แสดงที่มาของทุกตัวเลข
 - [x] วัด correctness และ faithfulness ด้วยสูตรตายตัว
 - [x] บันทึกความแปรปรวนของการรันซ้ำ
-- [x] เก็บ prompt เต็ม tool call และสูตรที่มาของคะแนนลง Langfuse
+- [x] เก็บ system prompt เต็ม tool call และสูตรที่มาของคะแนนลง Langfuse
 
 ### จะทำต่อ
 

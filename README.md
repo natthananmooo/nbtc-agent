@@ -431,83 +431,41 @@ volumes:
 
 ---
 
-#### อ่าน log ของ `nbtc-mcp` ทีละช่วง
+#### อ่าน log ของ `nbtc-mcp`
 
-![log ของ MCP Server](docs/images/docker-mcp-logs.png)
+แถบสีบนภาพตรงกับสัญลักษณ์ในตารางคำอธิบาย
 
-log แบ่งได้เป็นสี่ช่วง แต่ละช่วงบอกคนละเรื่อง
+| สี | ข้อความใน log | ความหมาย |
+| :-: | --- | --- |
+| 🟦 | `Uvicorn running on http://0.0.0.0:8000` | container ขึ้นแล้ว bind ที่ `0.0.0.0` ไม่ใช่ `127.0.0.1` ไม่งั้น container อื่นในเครือข่ายเดียวกันต่อไม่ได้ |
+| 🟩 | `Created new transport with session ID` | ขั้น `initialize` ของ MCP เปิด session ใหม่ให้ Client หนึ่งคำถามของผู้ใช้เท่ากับหนึ่ง session |
+| 🟨 | `POST` · `GET` `/mcp` → `200 OK` / `202 Accepted` | ข้อความ JSON-RPC วิ่งผ่าน endpoint เดียว request ได้ `200` ส่วน notification ที่สเปกบอกว่าไม่ต้องมีคำตอบได้ `202` |
+| 🟪 | `[tool] query_complaints {...}` · `SQL` · `ได้` | **tool name** กับ **tool argument** ที่โมเดลส่งมาจริง และ SQL ที่ประกอบจากพารามิเตอร์นั้นแล้วรัน |
+| 🟧 | `เตือน ...` | ผลไม่ครบตามที่ควรเป็น ระบบส่งคำเตือนกลับเป็น input ให้โมเดลแก้เอง |
+| 🟥 | `Terminating session` · `DELETE /mcp` | ปิด session เมื่อตอบจบ ไม่ปล่อยค้าง |
 
-**🟩 ช่วงที่ 1 — ตอน container เพิ่งขึ้น**
+**ถามว่า จังหวัดไหนร้องเรียนมากที่สุดปี 2564**
 
-```
-[start] RAG_MODE=rerank RERANK_MODEL=BAAI/bge-reranker-v2-m3
-INFO:     Started server process [1]
-INFO:     StreamableHTTP session manager started
-INFO:     Application startup complete.
-INFO:     Uvicorn running on http://0.0.0.0:8000
-```
+ผู้ใช้พิมพ์คำถามหนึ่งครั้ง `web` เปิด session กับ `mcp` เรียก `query_complaints` หนึ่งรอบ แล้วปิด session
+
+![log ของ nbtc-mcp พร้อมไฮไลต์](docs/images/docker-log-annotated.png)
+
+สามบรรทัดที่บอกว่าเป็น MCP จริง ไม่ใช่ REST ธรรมดา
+
+| สิ่งที่เห็น | ตรงกับอะไรในมาตรฐาน |
+| --- | --- |
+| `172.21.0.3` | IP ภายในเครือข่ายของ Compose **ไม่ใช่** `192.168.65.1` ที่เป็นเครื่อง macOS แปลว่าคนเรียกคือ container `web` ไม่ใช่คนกดจากเบราว์เซอร์ พิสูจน์ว่า Client กับ Server คุยกันข้าม container จริง |
+| `202 Accepted` | Client ส่ง notification ซึ่งตามสเปกไม่ต้องมีคำตอบ Server จึงตอบ `202` ไม่ใช่ `200` ถ้าเป็น REST ธรรมดาจะไม่มีความต่างนี้ |
+| `GET /mcp` | ช่องทางที่สเปก Streamable HTTP เปิดไว้ให้ Server ส่งข้อความกลับหา Client ได้เอง ไม่ต้องรอให้ Client ถามก่อน |
+
+สี่บรรทัดในแถบม่วงกับส้มคือหัวใจของกลไกอ่านอย่างเดียวและการแก้ผลเอง
 
 | บรรทัด | อ่านว่าอย่างไร |
 | --- | --- |
-| `[start] RAG_MODE=rerank` | บรรทัดนี้เราพิมพ์เอง เพื่อยืนยันว่า container กำลังรันขาไหนของการวัดผลสามขา ตอนวัดจะได้ไม่สลับขากันโดยไม่รู้ตัว |
-| `Started server process [1]` | PID เป็น 1 แปลว่าโปรเซสนี้คือโปรเซสหลักของ container ไม่ได้ถูกห่อด้วย shell |
-| `StreamableHTTP session manager started` | ตัวจัดการ session ของ MCP transport ชั้น Transport Layer พร้อมแล้ว |
-| `Uvicorn running on http://0.0.0.0:8000` | bind ที่ `0.0.0.0` ไม่ใช่ `127.0.0.1` ไม่งั้น container อื่นในเครือข่ายเดียวกันต่อไม่ได้ |
-
-**🟦 ช่วงที่ 2 — มีคนเปิดพอร์ตนี้ด้วยเบราว์เซอร์**
-
-```
-INFO:  192.168.65.1:62835 - "GET / HTTP/1.1" 404 Not Found
-INFO:  192.168.65.1:62835 - "GET /favicon.ico HTTP/1.1" 404 Not Found
-```
-
-`192.168.65.1` คือ gateway ที่ Docker Desktop ใช้แทนเครื่อง macOS ของเรา แปลว่าคนเปิด `localhost:8000` จากเบราว์เซอร์
-ได้ 404 เพราะ **MCP Server ไม่มีหน้าเว็บ** มีแต่ endpoint `/mcp` ที่รับ JSON-RPC
-เห็น 404 ตรงนี้ไม่ใช่ error แต่แปลว่าเปิดผิดพอร์ต หน้าเว็บอยู่ที่ `8080`
-
-**🟨 ช่วงที่ 3 — วงจรชีวิตหนึ่ง session ของ MCP**
-
-```
-INFO  Created new transport with session ID: 521d64364fc4447ebb001e7ba0f1a54a
-INFO:  172.21.0.3:50024 - "POST /mcp HTTP/1.1" 200 OK
-INFO:  172.21.0.3:50040 - "POST /mcp HTTP/1.1" 202 Accepted
-INFO:  172.21.0.3:50046 - "GET  /mcp HTTP/1.1" 200 OK
-INFO:  172.21.0.3:50060 - "DELETE /mcp HTTP/1.1" 200 OK
-INFO  Terminating session: 521d64364fc4447ebb001e7ba0f1a54a
-```
-
-| สิ่งที่เห็น | ตรงกับอะไรในมาตรฐาน MCP |
-| --- | --- |
-| `172.21.0.3` | IP ภายในเครือข่ายของ Compose **ไม่ใช่** `192.168.65.1` แปลว่าคนเรียกคือ container `web` ไม่ใช่คนกดจากเบราว์เซอร์ พิสูจน์ว่า Client กับ Server คุยกันข้าม container จริง |
-| `Created new transport with session ID` | ขั้น `initialize` ของ lifecycle ฝั่ง Server ออก session id ให้ Client ถือไว้ |
-| `POST /mcp` → `200 OK` | Client ส่ง JSON-RPC request เช่น `tools/list` หรือ `tools/call` แล้วรอคำตอบ |
-| `POST /mcp` → `202 Accepted` | Client ส่ง notification ซึ่งตามสเปกไม่ต้องมีคำตอบ Server จึงตอบ 202 ไม่ใช่ 200 |
-| `GET /mcp` | ช่องทางที่ Server ใช้ส่งข้อความกลับหาClient ได้เองตามสเปก Streamable HTTP |
-| `DELETE /mcp` → `Terminating session` | ปิด session อย่างเรียบร้อยเมื่อตอบคำถามเสร็จ ไม่ได้ปล่อยค้าง |
-
-**หนึ่งคำถามของผู้ใช้ = หนึ่ง session** เปิดตอนเริ่มตอบ ปิดตอนตอบจบ เห็นเป็นคู่ `Created` / `Terminating` ทุกครั้ง
-
-**🟧 ช่วงที่ 4 — ตอน tool ถูกเรียกจริง**
-
-```
-[tool] query_complaints {"metric": "count", "group_by": ["province"],
-                         "filters": {"year": [2564]}, "order_by": "count", "limit": 1}
-       SQL   SELECT province, COUNT(*) AS count FROM complaints
-             WHERE year IN (?) AND province IS NOT NULL GROUP BY province ...
-       ได้   1 แถว
-       เตือน ตัด 1324 เรื่องที่ไม่ระบุ province ออกจากผลลัพธ์ ต้องแจ้งผู้ใช้ด้วย
-       เตือน ผลถูกตัดเหลือ 1 กลุ่มตามค่า limit จากทั้งหมด 78 กลุ่ม
-             ถ้าคำถามต้องการครบ ให้เรียกใหม่โดยตั้ง limit อย่างน้อย 78        43 ms
-```
-
-| บรรทัด | อ่านว่าอย่างไร |
-| --- | --- |
-| `[tool] query_complaints {...}` | **tool name** กับ **tool argument** ที่โมเดลส่งมาจริง ไม่ใช่ที่เราคาดว่าโมเดลจะส่ง ดูบรรทัดนี้ก็รู้ทันทีว่าโมเดลเข้าใจคำถามผิดตรงไหน |
-| `SQL SELECT ...` | SQL ที่ประกอบขึ้นจาก argument ข้างบนและรันจริง **โมเดลไม่เคยเขียน SQL เอง** ส่งมาแค่พารามิเตอร์ |
-| `ได้ 1 แถว` | จำนวนแถวที่ฐานข้อมูลคืนมา เทียบกับ `limit` ที่โมเดลตั้งไว้ |
-| `เตือน ตัด 1324 เรื่องที่ไม่ระบุ province` | ข้อมูลจริงมีช่องว่าง `SQL` ตัดแถวที่ province เป็น `NULL` ทิ้ง เราจึงบังคับให้ส่งคำเตือนกลับไปเป็น input ของโมเดล เพื่อให้คำตอบสุดท้ายบอกผู้ใช้ด้วย |
+| `[tool] query_complaints {"metric": "count", ... "limit": 1}` | พารามิเตอร์ที่โมเดลส่งมาจริง ไม่ใช่ที่เราคาดว่าโมเดลจะส่ง ดูบรรทัดนี้ก็รู้ทันทีว่าโมเดลเข้าใจคำถามผิดตรงไหน |
+| `SQL SELECT province, COUNT(*) ...` | SQL ที่ประกอบขึ้นจากพารามิเตอร์ข้างบนแล้วรันจริง **โมเดลไม่เคยเขียน SQL เอง** |
+| `เตือน ตัด 1324 เรื่องที่ไม่ระบุ province` | ข้อมูลจริงมีช่องว่าง `SQL` ตัดแถวที่เป็น `NULL` ทิ้ง เราจึงบังคับให้ส่งคำเตือนกลับไป เพื่อให้คำตอบสุดท้ายบอกผู้ใช้ด้วย |
 | `เตือน ผลถูกตัดเหลือ 1 กลุ่ม จากทั้งหมด 78 กลุ่ม` | โมเดลตั้ง `limit: 1` เอง ระบบจึงเตือนว่าผลไม่ครบและบอกตัวเลขที่ควรตั้ง นี่คือกลไก **ส่งผลที่ไม่ผ่านการกรองกลับเป็น input ให้โมเดลแก้เอง** |
-| `43 ms` | เวลาที่ใช้ทั้ง tool ตั้งแต่ตรวจค่าจนรัน SQL เสร็จ |
 
 คำเตือนสองบรรทัดนั้นไม่ได้ค้างอยู่ใน log เฉย ๆ แต่ถูกส่งกลับไปให้โมเดลและโผล่ในคำตอบบนหน้าเว็บจริง
 

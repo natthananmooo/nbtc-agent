@@ -326,7 +326,7 @@ SDK นำ docstring ไปใส่เป็น `description` ใน schema ก
 | แพ็กเกจ | `openai` | `mcp` รุ่น 2.x |
 | หน้าที่ | คุยกับโมเดลผ่าน endpoint | ประกาศและเสิร์ฟ tool ผ่านโปรโตคอล |
 | อยู่ในไฟล์ | `agent.py` | `mcp_server/server.py` |
-| คลาสหลัก | `OpenAI(...)` | `MCPServer` ไม่ใช่ FastMCP |
+| คลาสหลัก | `OpenAI(...)` | `MCPServer` คือชื่อใหม่ของ `FastMCP` |
 | อ่านผลด้วย | `resp.choices[0].message` | `result.content` |
 
 ฝั่ง LLM SDK ใช้รูปแบบ **thin client** คือใช้ OpenAI SDK ตัวจริงแล้วเปลี่ยน `base_url` เป็น OpenRouter
@@ -342,6 +342,44 @@ client = OpenAI(api_key=key, base_url="https://openrouter.ai/api/v1")
 เพราะสิ่งที่ SDK ต้องเข้าใจคือ schema ของ endpoint ไม่ใช่ยี่ห้อโมเดล
 ทั้ง `openai/gpt-4.1-mini`, `qwen/qwen-2.5-72b-instruct` และ `google/gemini-*`
 จึงอ่านผลด้วย `resp.choices[0].message` เหมือนกันหมด
+
+#### FastMCP กับ MCPServer คือตัวเดียวกัน
+
+โครงงานนี้เขียนว่า `MCPServer` ไม่ใช่ `FastMCP` ซึ่ง**ไม่ได้แปลว่าใช้คนละอย่าง**
+`FastMCP` คือชื่อเดิมของคลาสนี้ใน MCP Python SDK รุ่น 1.x พอขึ้นรุ่น 2.x ถูกเปลี่ยนชื่อเป็น `MCPServer`
+ตัว SDK เองบอกไว้ในข้อความ error ตอน import แบบเก่า
+
+```
+>>> from mcp.server.fastmcp import FastMCP
+ModuleNotFoundError: No module named 'mcp.server.fastmcp'. This is mcp 2.x, where
+FastMCP was renamed to MCPServer (from mcp.server.mcpserver import MCPServer)
+and other APIs changed; see the migration guide ... or pin 'mcp<2' to keep running v1 code.
+```
+
+ท่าเขียนเหมือนเดิมทุกอย่าง ทั้ง `@mcp.tool()` การสร้าง schema จาก type hint กับ docstring
+และ `mcp.run(transport=...)` เปลี่ยนแค่ชื่อคลาสกับ path ที่ import
+โครงงานนี้ตรึงไว้ที่ `mcp>=2.3.0` ใน `mcp_server/requirements.txt`
+
+#### ตรงกับเช็กลิสต์ของวิชา
+
+| หัวข้อในสไลด์ | ของเรา | ดูได้ที่ |
+| --- | --- | --- |
+| Python environment และ FastMCP installation | `mcp>=2.3.0` ลงใน image ตอน build ไม่ใช่ลงบนเครื่อง | `mcp_server/requirements.txt` · `mcp_server/Dockerfile` |
+| Decorator pattern `@mcp.tool` | ใช้ครบทั้ง 6 tool | `mcp_server/server.py` |
+| Docstrings สำหรับ AI understanding | ครบทั้ง 6 หัวข้อที่สไลด์แนะนำ | [docstring](#คำสั่งทั้งหมดอยู่ใน-docstring-ไม่ได้อยู่ในโค้ด) |
+| Error handling แยก recoverable กับ fatal | `EXPECTED` · `_recoverable()` · `_unexpected()` | [สัญญาก่อนใช้และหลังใช้](#สัญญาก่อนใช้และหลังใช้-เขียนด้วยโค้ดเรา-ไม่ใช่ฝากโมเดล) |
+| Transport เป็น Streamable HTTP | `MCP_TRANSPORT=streamable-http` สลับเป็น stdio ได้ | [Data Layer กับ Transport Layer](#data-layer-กับ-transport-layer) |
+| MCP Server รันผ่าน Docker แบบ containerized | container `nbtc-mcp` แยกจาก `nbtc-web` | [ทุกอย่างรันบน Docker](#ทุกอย่างรันบน-docker) |
+
+**สองจุดที่ต่างจากตัวอย่างในสไลด์ โดยตั้งใจ**
+
+ชื่อคีย์ของ error สไลด์ใช้ `error` · `code` · `hint` ส่วนของเราใช้ `ok` · `code` · `error` · `how_to_fix`
+แล้วแนบค่าที่ใช้ได้จริงไปด้วย เช่น `valid_columns` คีย์ `ok` มีไว้ให้โมเดลเช็คก่อนใช้ผล
+และ `how_to_fix` คือ `hint` ที่เปลี่ยนชื่อให้อ่านแล้วรู้ทันทีว่าต้องทำอะไรต่อ
+
+MCP Host ของเราคือหน้าเว็บของโครงงานเอง ไม่ใช่ Claude Desktop
+จึงไม่มีไฟล์ `claude_desktop_config.json` เพราะ Client ต่อ MCP Server ตรงด้วย
+`streamable_http_client` ใน `agent.py` ไม่ต้องผ่าน `mcp-remote`
 
 ### เทคโนโลยีและหน้าที่ของแต่ละส่วน
 

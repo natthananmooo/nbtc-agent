@@ -422,18 +422,22 @@ INFO:  192.168.65.1:62835 - "GET /favicon.ico HTTP/1.1" 404 Not Found
 | `POST /api/ask` | ![คำตอบบนหน้าเว็บ](docs/images/web-answer-province.png) | คำตอบขึ้นบนหน้าเว็บพร้อมคำเตือนที่ tool ส่งกลับมา แปลว่า endpoint นี้ทำงานครบเส้นทาง |
 | `POST /chat/completions` | [trace ใน Langfuse](#วิธีวัด) | complete prompt · reasoning · tool call และจำนวน token ทุกรอบ |
 | `GET /` ที่พอร์ต 8000 | [log ของ nbtc-mcp](#อ่าน-log-ของ-nbtc-mcp) | `404 Not Found` ซึ่งยืนยันว่า MCP Server มี endpoint เดียวคือ `/mcp` |
+| `GET /api/health` | `docs/images/api-health.png` | ได้ `ok: true` พร้อมชื่อ tool ครบ 6 ตัว ซึ่งมาจากการ `list_tools()` ข้าม container จริง |
 
 ถ้าอยากเช็กด้วยตัวเองว่าทั้งสอง container ต่อกันติดไหม เปิด `http://localhost:8080/api/health`
 endpoint นี้จะไป `list_tools()` กับ MCP Server จริง **ถ้าได้ชื่อ tool กลับมาครบ 6 ตัว แปลว่าเส้นทางทั้งหมดใช้งานได้**
+
+![ผลของ GET /api/health](docs/images/api-health.png)
+
+ลำดับชื่อ tool ที่คืนมาคือลำดับที่ `@mcp.tool()` ถูกประกาศในไฟล์ ไม่ได้เรียงตามตัวอักษร
 
 ```bash
 curl -s http://localhost:8080/api/health
 ```
 
 ```json
-{"ok": true, "model": "openai/gpt-4.1-mini", "langfuse": true,
- "tools": ["resolve_filter_values", "explore_relations", "query_complaints",
-           "analyze_results", "render_chart", "generate_dashboard"]}
+{"ok":true,"model":"openai/gpt-4.1-mini","langfuse":true,"tools":
+["resolve_filter_values","query_complaints","explore_relations","analyze_results","render_chart","generate_dashboard"]}
 ```
 
 #### FastMCP กับ MCPServer คือตัวเดียวกัน

@@ -392,6 +392,56 @@ result = await session.call_tool(name, args)        # เรียกผ่า�
 แต่ถาม server ตอนรันว่ามี tool อะไรบ้าง schema หน้าตายังไง แล้วค่อยแปลงเป็นรูปแบบที่ LLM เข้าใจ
 เพิ่ม tool ใหม่ที่ฝั่ง server แล้ว agent เห็นทันทีโดยไม่ต้องแก้โค้ดฝั่ง client
 
+#### MCP server คืออะไร ตามนิยามของมาตรฐาน
+
+> **MCP server: a program that provides context to MCP clients**
+
+ของเราคือ `mcp_server/server.py` ซึ่งให้ context สองทาง — **6 tool** สำหรับการกระทำ
+และ **1 resource** คือ `schema://values` สำหรับข้อมูลบริบทที่อ่านอย่างเดียว
+
+#### Data Layer กับ Transport Layer
+
+มาตรฐานแบ่งโปรโตคอลเป็นสองชั้น และทั้งสองชั้นเป็นคนละเรื่องกัน
+
+| ชั้น | มาตรฐานกำหนดว่า | ของเราคือ |
+| --- | --- | --- |
+| **Data Layer** | ภาษาและกติกาที่ client กับ server ใช้คุยกัน<br>MCP ใช้ **JSON-RPC 2.0** เป็นรูปแบบข้อความ | ทุกข้อความระหว่าง `agent.py` กับ server เป็น JSON-RPC 2.0 ทั้งหมด |
+| | method สำหรับงานพื้นฐาน เช่น initialization, listing capabilities, calling a tool | `initialize` · `tools/list` · `tools/call` · `resources/read` |
+| | lifecycle management | เปิดด้วย `initialize()` ปิดเมื่อออกจาก context manager |
+| **Transport Layer** | **stdio** สำหรับ server ที่ host เปิดเองในเครื่อง<br>**HTTP** สำหรับ server ที่อยู่คนละที่ | ใช้ **Streamable HTTP** เป็นหลัก และ**รองรับ stdio ด้วย** |
+
+ข้อความที่วิ่งจริงหน้าตาแบบนี้ ตัว JSON-RPC อยู่ชั้นนอก ส่วนเนื้อในคือ tool กับพารามิเตอร์
+
+```json
+{"jsonrpc": "2.0", "id": 7, "method": "tools/call",
+ "params": {"name": "query_complaints",
+            "arguments": {"metric": "count", "filters": {"year": [2564]}}}}
+```
+
+server ตอบกลับด้วย envelope เดียวกัน โดยผลของ tool อยู่ใน `result`
+
+```json
+{"jsonrpc": "2.0", "id": 7,
+ "result": {"content": [{"type": "text",
+                         "text": "{\"rows\": [...], \"sql_used\": \"SELECT ...\"}"}],
+            "isError": false}}
+```
+
+**เปลี่ยน transport ได้โดยไม่แตะ tool สักตัว** เพราะสองชั้นนี้แยกกันจริง
+
+```python
+transport = os.environ.get("MCP_TRANSPORT", "streamable-http")
+if transport == "stdio":
+    mcp.run(transport="stdio")          # host เปิดเองในเครื่อง คุยผ่าน stdin stdout
+else:
+    mcp.run(transport="streamable-http",  # คุยผ่านเครือข่ายที่ :8000/mcp
+            host=os.environ.get("MCP_HOST", "0.0.0.0"),
+            port=int(os.environ.get("MCP_PORT", "8000")))
+```
+
+งานนี้เลือก Streamable HTTP เพราะต้องรันใน Docker container แยก ซึ่ง stdio ทำไม่ได้
+แต่โค้ดยังรองรับ stdio ไว้ จึงสลับได้ด้วยตัวแปร `MCP_TRANSPORT` ตัวเดียว
+
 #### ลำดับตามแผนภาพมาตรฐาน
 
 | ขั้นตอนในมาตรฐาน | ของเรา |

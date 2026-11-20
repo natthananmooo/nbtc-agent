@@ -42,3 +42,52 @@ services:
     depends_on:
       - mcp
     restart: unless-stopped
+
+  # ฐานข้อมูลเวกเตอร์สำหรับคลังกฎหมาย แยกจาก complaints.db ที่เป็น SQLite อ่านอย่างเดียว
+  # ใช้ image ที่มีส่วนขยาย pgvector มาให้แล้ว ไม่ต้อง compile เอง
+  pgvec:
+    image: pgvector/pgvector:pg17
+    container_name: nbtc-pgvec
+    environment:
+      POSTGRES_USER: law
+      POSTGRES_PASSWORD: law
+      POSTGRES_DB: law
+    ports:
+      # เปิด 5433 ออกมาข้างนอก เพื่อให้สคริปต์บนเครื่องต่อเข้ามาดูข้อมูลได้
+      - "5433:5432"
+    volumes:
+      - pgvec-data:/var/lib/postgresql/data
+    healthcheck:
+      # lawrag ต้องรอจนฐานข้อมูลพร้อมจริง ไม่ใช่แค่คอนเทนเนอร์ขึ้น
+      test: ["CMD-SHELL", "pg_isready -U law -d law"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  # คอนเทนเนอร์สำหรับงานทำดัชนีและวัดผล ไม่มี server ให้รันค้างไว้
+  # อยู่ใน profile tools จึงไม่ขึ้นมาพร้อม docker compose up ธรรมดา
+  # เรียกใช้ด้วย docker compose run --rm lawrag python -m lawrag.index
+  lawrag:
+    build:
+      context: .
+      dockerfile: lawrag/Dockerfile
+      args:
+        # โมเดลถูกฝังใน image ตอน build ค่านี้จึงต้องส่งตอน build ด้วย
+        EMBED_MODEL: ${EMBED_MODEL:-BAAI/bge-m3}
+    container_name: nbtc-lawrag
+    environment:
+      PGDSN: postgresql://law:law@pgvec:5432/law
+      LAW_DIR: /data/law
+      EMBED_MODEL: ${EMBED_MODEL:-BAAI/bge-m3}
+    volumes:
+      # ต้องเขียนได้ เพราะดัชนี BM25 ถูกเก็บเป็นไฟล์ในโฟลเดอร์นี้
+      - ./data/law:/data/law
+    depends_on:
+      pgvec:
+        condition: service_healthy
+    profiles: ["tools"]
+
+volumes:
+  # เก็บข้อมูล Postgres ไว้นอกคอนเทนเนอร์ ลบคอนเทนเนอร์แล้วดัชนีไม่หาย
+  pgvec-data:

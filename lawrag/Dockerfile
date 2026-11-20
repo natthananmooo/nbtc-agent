@@ -24,6 +24,12 @@ RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTr
 # โหลดพจนานุกรมตัดคำไทยของ pythainlp ไว้ล่วงหน้า กันไม่ให้ไปโหลดตอนรัน
 RUN python -c "from pythainlp.tokenize import word_tokenize; word_tokenize('ทดสอบการตัดคำภาษาไทย', engine='newmm')"
 
+# ฝังโมเดลจัดอันดับไว้ด้วย ตัวเดียวกับที่ image ของ mcp ใช้ในชั้นค้นค่าฝั่ง SQL
+# วางไว้ก่อนตั้ง HF_HUB_OFFLINE เพราะหลังจากบรรทัดนั้นจะโหลดอะไรจากอินเทอร์เน็ตไม่ได้แล้ว
+ARG RERANK_MODEL=BAAI/bge-reranker-v2-m3
+ENV RERANK_MODEL=${RERANK_MODEL}
+RUN python -c "from sentence_transformers import CrossEncoder; CrossEncoder('${RERANK_MODEL}', max_length=512)"
+
 ENV HF_HUB_OFFLINE=1
 
 COPY lawrag/ ./lawrag/

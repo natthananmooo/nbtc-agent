@@ -8,6 +8,8 @@ services:
         # โมเดลถูกฝังใน image ตอน build ค่านี้จึงต้องส่งตอน build ด้วย
         # เปลี่ยนใน .env แล้วรัน docker compose up -d --build mcp
         RERANK_MODEL: ${RERANK_MODEL:-BAAI/bge-reranker-v2-m3}
+        # ต้องตรงกับที่ lawrag ใช้ตอนทำดัชนี ไม่งั้นผลค้นกฎหมายจะมั่ว
+        EMBED_MODEL: ${EMBED_MODEL:-BAAI/bge-m3}
     container_name: nbtc-mcp
     ports:
       - "8000:8000"
@@ -16,11 +18,19 @@ services:
       # ตั้งค่าใน .env แล้ว docker compose up -d mcp เพื่อสลับตอนวัดผล
       RAG_MODE: ${RAG_MODE:-off}
       RERANK_MODEL: ${RERANK_MODEL:-BAAI/bge-reranker-v2-m3}
+      EMBED_MODEL: ${EMBED_MODEL:-BAAI/bge-m3}
+      PGDSN: postgresql://law:law@pgvec:5432/law
+      LAW_DIR: /data/law
     volumes:
       # ชั้นที่ 4 ของกลไกอ่านอย่างเดียว
       # :ro ทำให้ kernel ปฏิเสธการเขียน และโปรเซสอื่นไม่เห็นไฟล์นี้เลย
       - ./data/complaints.db:/data/complaints.db:ro
+      # ดัชนี BM25 และกราฟของชั้นค้นกฎหมาย อ่านอย่างเดียวเหมือนกัน
+      - ./data/law:/data/law:ro
       - ./charts:/charts
+    depends_on:
+      pgvec:
+        condition: service_healthy
     restart: unless-stopped
 
   web:

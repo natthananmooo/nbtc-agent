@@ -20,6 +20,9 @@ charts/*
 # ยกเว้นภาพประกอบ README ต้องขึ้น git ไม่งั้น GitHub แสดงภาพไม่ได้
 !docs/images/*.png
 
+# ถูกแทนที่ด้วย glossary-book.gif แล้ว ไม่ได้ใช้ใน README
+docs/images/glossary-pages.png
+
 # Python
 __pycache__/
 *.py[cod]
@@ -35,3 +38,16 @@ venv/
 # txt สร้างใหม่ได้ด้วย lawrag/extract.py
 data/law/pdf/
 data/law/txt/
+
+# เวกเตอร์ที่ encode ไว้ ชุดละ 2.8 MB สร้างใหม่ได้ด้วย lawrag/index.py
+# เก็บไว้บนเครื่องเพื่อให้รันซ้ำไม่ต้อง encode ใหม่ แต่ไม่ต้องขึ้น git
+data/law/emb_*.npy
+
+# ดัชนี BM25 สร้างใหม่ได้ด้วย lawrag/index.py
+data/law/*.pkl
+
+# ไฟล์สำรองก่อนแก้ข้อมูล เก็บไว้เทียบบนเครื่องเท่านั้น
+data/law/*.before_*.json
+
+# ไฟล์ชั่วคราวระหว่างแก้เอกสาร ขึ้นต้นด้วยขีดล่าง
+data/law/_*

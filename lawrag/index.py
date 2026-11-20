@@ -17,6 +17,19 @@ lawrag/index.py - ทำดัชนีสองชุดสำหรับเ�
     ส่วน newmm ของ pythainlp ตัดตามพจนานุกรมไทย และโครงการนี้ใช้อยู่แล้ว
     ในชั้นค้นค่าของฝั่ง SQL จึงใช้ตัวเดียวกัน จะได้ไม่ต้องดูแลสองระบบ
 
+ทำไมต้องเก็บเวกเตอร์ลงไฟล์ก่อน แล้วค่อยเขียนฐานข้อมูล
+    รอบแรกรันแล้วพังตอน executemany ด้วย server closed the connection unexpectedly
+    คือ Postgres ถูกฆ่าทิ้งระหว่างเขียน ไม่ใช่ SQL ผิด สาเหตุคือแรมของเครื่องตึง
+    ตอนนั้นโมเดล bge-m3 ยังค้างอยู่ในแรมราวสองกิกะ พร้อมกับคอนเทนเนอร์ Postgres
+    ของเดิมเขียนไว้เป็น encode แล้วเขียนฐานข้อมูลต่อกันในฟังก์ชันเดียว
+    พอฐานข้อมูลตาย เวลา encode ยี่สิบสี่นาทีจึงหายไปทั้งหมด ต้องเริ่มใหม่หมด
+
+    จึงแยกเป็นสามขั้นที่ไม่ขึ้นต่อกัน
+      ขั้นที่หนึ่ง  encode ทั้งสองชุด เก็บเป็น data/law/emb_<ชุด>.npy ยังไม่แตะฐานข้อมูล
+      ขั้นที่สอง   ปล่อยโมเดลออกจากแรม แล้วค่อยต่อฐานข้อมูล
+      ขั้นที่สาม   เขียนทีละก้อนเล็กและ commit ทุกก้อน ไม่ส่งทีเดียวทั้งชุด
+    รันซ้ำจะเห็นว่ามีไฟล์ .npy อยู่แล้วและข้าม encode ไปเลย เสียเวลาแค่ขั้นเขียน
+
 ไฟล์เข้า : data/law/chunks_contextual.json
 ผลลัพธ์  : ตาราง law_chunk และ law_vec_plain law_vec_ctx ใน Postgres
            และ data/law/bm25_plain.pkl กับ data/law/bm25_ctx.pkl
@@ -37,6 +50,7 @@ PGDSN = os.environ.get("PGDSN", "postgresql://law:law@localhost:5433/law")
 EMBED_MODEL = os.environ.get("EMBED_MODEL", "BAAI/bge-m3")
 DIM = 1024
 BATCH = 16          # ขนาดก้อนตอน encode บน CPU ใหญ่กว่านี้กินแรมโดยไม่เร็วขึ้น
+INSERT_BATCH = 64   # ขนาดก้อนตอนเขียนฐานข้อมูล เล็กไว้เพื่อให้ commit ได้ถี่
 
 # สองชุดที่จะทำดัชนี ชื่อชุด -> ฟิลด์ที่ใช้เป็นข้อความ
 VARIANTS = {"plain": "text", "ctx": "text_contextual"}
@@ -101,23 +115,52 @@ def insert_chunks(conn, rows: list[dict]) -> None:
     conn.commit()
 
 
-# ส่วนที่ 5: สร้างเวกเตอร์และใส่ลง pgvector
-# หน้าที่: encode ข้อความทั้งชุดแล้วเขียนลงตารางของชุดนั้น
-# รับ: connection, โมเดล, รายการ chunk, ชื่อชุด, ชื่อฟิลด์ · คืน: เวลาที่ใช้เป็นวินาที
-def build_dense(conn, model, rows: list[dict], variant: str, field: str) -> float:
+# ส่วนที่ 5: ขั้นที่หนึ่ง encode แล้วเก็บลงไฟล์
+# หน้าที่: แปลงข้อความทั้งชุดเป็นเวกเตอร์ ถ้าเคยทำไว้แล้วให้ใช้ของเดิม
+# ทำไมเก็บลงไฟล์: ขั้นนี้นานที่สุด ถ้าขั้นเขียนฐานข้อมูลพัง จะได้ไม่ต้อง encode ใหม่
+# รับ: โมเดล, รายการ chunk, ชื่อชุด, ชื่อฟิลด์ · คืน: (เวกเตอร์, วินาทีที่ใช้ encode)
+def encode_variant(model, rows: list[dict], variant: str, field: str):
+    import numpy as np
+    path = os.path.join(LAW_DIR, f"emb_{variant}.npy")
+    if os.path.exists(path):
+        vecs = np.load(path)
+        if vecs.shape == (len(rows), DIM):
+            print("   มี emb_%s.npy อยู่แล้ว ข้าม encode" % variant, flush=True)
+            return vecs, 0.0
+        # ขนาดไม่ตรงแปลว่า chunk เปลี่ยนไปแล้ว ของเดิมใช้ไม่ได้
+        print("   emb_%s.npy ขนาด %s ไม่ตรงกับ chunk %d ก้อน จะ encode ใหม่"
+              % (variant, vecs.shape, len(rows)), flush=True)
     t0 = time.time()
-    texts = [r[field] for r in rows]
-    vecs = model.encode(texts, batch_size=BATCH, normalize_embeddings=True,
-                        show_progress_bar=False)
+    vecs = model.encode([r[field] for r in rows], batch_size=BATCH,
+                        normalize_embeddings=True, show_progress_bar=False)
+    vecs = np.asarray(vecs, dtype="float32")
+    np.save(path, vecs)
+    return vecs, time.time() - t0
+
+
+# ส่วนที่ 5.1: ขั้นที่สาม เขียนเวกเตอร์ลง pgvector
+# หน้าที่: เขียนทีละก้อนเล็กและ commit ทุกก้อน แล้วจึงสร้างดัชนี HNSW
+# ทำไมไม่ส่งทีเดียว: executemany ก้อนเดียวทั้งชุดทำให้ฝั่งเซิร์ฟเวอร์ค้างงานไว้มาก
+#                    ถ้าโดนฆ่ากลางทาง จะไม่รู้เลยว่าค้างที่แถวไหน
+# รับ: connection, รายการ chunk, เวกเตอร์, ชื่อชุด · คืน: เวลาที่ใช้เป็นวินาที
+def insert_dense(conn, rows: list[dict], vecs, variant: str) -> float:
+    t0 = time.time()
+    done = 0
+    for i in range(0, len(rows), INSERT_BATCH):
+        part = [(r["id"], "[" + ",".join("%.6f" % x for x in v) + "]")
+                for r, v in zip(rows[i:i + INSERT_BATCH], vecs[i:i + INSERT_BATCH])]
+        with conn.cursor() as cur:
+            cur.executemany(
+                f"INSERT INTO law_vec_{variant} (chunk_id, emb) VALUES (%s, %s)", part)
+        conn.commit()
+        done += len(part)
+        print("      เขียนแล้ว %d/%d แถว" % (done, len(rows)), end="\r", flush=True)
     with conn.cursor() as cur:
-        cur.executemany(
-            f"INSERT INTO law_vec_{variant} (chunk_id, emb) VALUES (%s, %s)",
-            [(r["id"], "[" + ",".join("%.6f" % x for x in v) + "]")
-             for r, v in zip(rows, vecs)])
         # ใช้ cosine เพราะเวกเตอร์ถูก normalize แล้ว ระยะ cosine จึงเทียบได้ตรง
         cur.execute(f"""CREATE INDEX ON law_vec_{variant}
                         USING hnsw (emb vector_cosine_ops)""")
     conn.commit()
+    print("      เขียนครบ %d แถว และสร้างดัชนี HNSW แล้ว" % done, flush=True)
     return time.time() - t0
 
 
@@ -139,6 +182,7 @@ def build_bm25(rows: list[dict], variant: str, field: str) -> float:
 
 # ส่วนที่ 7: จุดเริ่มทำงาน
 def main() -> int:
+    import gc
     import psycopg
     from sentence_transformers import SentenceTransformer
 
@@ -149,22 +193,37 @@ def main() -> int:
               % len(missing), file=sys.stderr)
         return 1
 
+    # ขั้นที่หนึ่ง encode ทั้งสองชุดให้เสร็จก่อน ยังไม่ต่อฐานข้อมูล
     print("โหลดโมเดล %s" % EMBED_MODEL, flush=True)
     model = SentenceTransformer(EMBED_MODEL)
-    print("ต่อฐานข้อมูล %s" % PGDSN.split("@")[-1], flush=True)
-    conn = psycopg.connect(PGDSN)
-
-    prepare(conn)
-    insert_chunks(conn, rows)
-    print("ใส่ตัวบทแล้ว %d ก้อน\n" % len(rows), flush=True)
-
+    vecs = {}
     for variant, field in VARIANTS.items():
         avg = sum(len(r[field]) for r in rows) / len(rows)
         print("ชุด %-6s ใช้ฟิลด์ %-16s ความยาวเฉลี่ย %.0f ตัวอักษร"
               % (variant, field, avg), flush=True)
-        d = build_dense(conn, model, rows, variant, field)
+        vecs[variant], sec = encode_variant(model, rows, variant, field)
+        if sec:
+            print("   encode %.0f วินาที เก็บไว้ที่ emb_%s.npy" % (sec, variant),
+                  flush=True)
+
+    # ขั้นที่สอง คืนแรมของโมเดลก่อน แล้วค่อยยุ่งกับฐานข้อมูล
+    # ลำดับนี้สำคัญ เพราะถ้าถือโมเดลไว้ตอนเขียน เครื่องที่แรมตึงจะฆ่า Postgres ทิ้ง
+    del model
+    gc.collect()
+    print("\nคืนแรมของโมเดลแล้ว เริ่มเขียนฐานข้อมูล", flush=True)
+
+    print("ต่อฐานข้อมูล %s" % PGDSN.split("@")[-1], flush=True)
+    conn = psycopg.connect(PGDSN)
+    prepare(conn)
+    insert_chunks(conn, rows)
+    print("ใส่ตัวบทแล้ว %d ก้อน\n" % len(rows), flush=True)
+
+    # ขั้นที่สาม เขียนเวกเตอร์และทำ BM25 ทีละชุด
+    for variant, field in VARIANTS.items():
+        print("ชุด %s" % variant, flush=True)
+        d = insert_dense(conn, rows, vecs[variant], variant)
         b = build_bm25(rows, variant, field)
-        print("   dense %.0f วินาที · BM25 %.0f วินาที\n" % (d, b), flush=True)
+        print("   เขียน dense %.0f วินาที · BM25 %.0f วินาที\n" % (d, b), flush=True)
 
     with conn.cursor() as cur:
         for v in VARIANTS:

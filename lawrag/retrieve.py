@@ -78,15 +78,23 @@ class LawRetriever:
 
         # เก็บข้อความไว้ในหน่วยความจำ เพราะ cross-encoder ต้องใช้ทุกครั้งที่จัดอันดับ
         with self.conn.cursor() as cur:
-            cur.execute("SELECT id, doc_title, unit, number, body, text, text_ctx FROM law_chunk")
+            # ดึง url มาด้วย เพราะคำตอบต้องอ้างกลับไปที่ราชกิจจานุเบกษาได้
+            cur.execute("SELECT id, doc_title, unit, number, body, text, text_ctx, url "
+                        "FROM law_chunk")
             self.meta = {r[0]: {"doc_title": r[1], "unit": r[2], "number": r[3],
-                                "body": r[4], "plain": r[5], "ctx": r[6]}
+                                "body": r[4], "plain": r[5], "ctx": r[6], "url": r[7]}
                          for r in cur.fetchall()}
 
         self.reranker = None
         if with_rerank:
             from sentence_transformers import CrossEncoder
             self.reranker = CrossEncoder(RERANK_MODEL, max_length=512)
+
+        # เก็บผลที่คำนวณแล้วไว้ใช้ซ้ำ เพราะตอนวัดผลเราถามคำถามเดียวกันกับทั้ง 7 วิธี
+        # ทุกวิธีใช้โมเดลตัวเดียวกัน ผลจึงเหมือนกันเป๊ะ การคำนวณซ้ำคือเสียเวลาเปล่า
+        # ไม่กระทบความถูกต้อง เพราะทั้งสองขั้นเป็นฟังก์ชันที่ให้ผลเดิมเสมอเมื่ออินพุตเดิม
+        self._qvec: dict[str, str] = {}       # คำถาม -> สตริงเวกเตอร์พร้อมใส่ SQL
+        self._rrk: dict[tuple, list[str]] = {}  # (คำถาม, ชุด, k, ผู้เข้าชิง) -> ลำดับใหม่
 
         self.graph = None
         if with_graph:
@@ -95,10 +103,20 @@ class LawRetriever:
             self.gedges = g["edges"]
             self.graph = True
 
+    # หน้าที่: แปลงคำถามเป็นสตริงเวกเตอร์สำหรับใส่ใน SQL เก็บไว้ใช้ซ้ำ
+    # ขั้นนี้คือขั้นที่แพงที่สุดขั้นหนึ่ง วัดได้ 78 วินาทีต่อครั้งบนเครื่องที่ทรัพยากรตึง
+    # รับ: คำถาม · คืน: สตริงรูปแบบ [0.01,-0.13,...] ที่ pgvector รับได้
+    def query_literal(self, query: str) -> str:
+        lit = self._qvec.get(query)
+        if lit is None:
+            v = self.embed.encode([query], normalize_embeddings=True)[0]
+            lit = "[" + ",".join("%.6f" % x for x in v) + "]"
+            self._qvec[query] = lit
+        return lit
+
     # หน้าที่: ค้นด้วยเวกเตอร์ · รับ: คำถาม ชุดดัชนี จำนวน · คืน: ลิสต์ id เรียงจากใกล้สุด
     def dense(self, query: str, variant: str, k: int) -> list[str]:
-        v = self.embed.encode([query], normalize_embeddings=True)[0]
-        lit = "[" + ",".join("%.6f" % x for x in v) + "]"
+        lit = self.query_literal(query)
         with self.conn.cursor() as cur:
             # <=> คือระยะ cosine ของ pgvector ยิ่งน้อยยิ่งใกล้
             cur.execute(f"""SELECT chunk_id FROM law_vec_{variant}
@@ -118,10 +136,18 @@ class LawRetriever:
     def rerank(self, query: str, ids: list[str], variant: str, k: int) -> list[str]:
         if not self.reranker or not ids:
             return ids[:k]
+        # วิธี rerank+ctx_embedding+bm25 กับ graph+rerank+ctx ส่งผู้เข้าชิงชุดเดียวกันเข้ามา
+        # เพราะกราฟไปต่อท้ายทีหลัง ไม่ได้เปลี่ยนชุดที่เข้า rerank จึงคำนวณครั้งเดียวพอ
+        key = (query, variant, k, tuple(ids))
+        hit = self._rrk.get(key)
+        if hit is not None:
+            return hit
         pairs = [(query, self.meta[i][variant]) for i in ids if i in self.meta]
         valid = [i for i in ids if i in self.meta]
         scores = self.reranker.predict(pairs)
-        return [i for _, i in sorted(zip(scores, valid), key=lambda x: -x[0])][:k]
+        out = [i for _, i in sorted(zip(scores, valid), key=lambda x: -x[0])][:k]
+        self._rrk[key] = out
+        return out
 
     # หน้าที่: ขยายผลด้วยการเดินกราฟการอ้างอิง
     # รับ: id ตั้งต้น · คืน: ลิสต์ id ของ chunk ที่เดินไปถึง โดยไม่ซ้ำกับตั้งต้น

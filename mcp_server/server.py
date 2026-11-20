@@ -78,6 +78,12 @@ def _log_call(name: str, args: dict, result, started: float):
             if "similar" in result:  # มาจาก explore_relations โหมด similar
                 line += "\n        ได้      ค่าใกล้เคียง %d ตัว เทียบบน %s" % (
                     len(result["similar"]), result.get("compared_on"))
+            if "law_results" in result:
+                line += "\n        ได้      %d ข้อ ด้วยวิธี %s" % (
+                    len(result["law_results"]), result.get("method_used"))
+                for r in result["law_results"][:3]:
+                    line += "\n                 %s %s · %s" % (
+                        r.get("unit"), r.get("number"), r.get("doc_title", "")[:52])
             if "findings" in result:  # มาจาก analyze_results
                 line += "\n        ได้      %d ข้อสรุป" % len(result["findings"])
             if "image_path" in result:  # มาจาก render_chart
@@ -541,6 +547,140 @@ def generate_dashboard(
             _unexpected("generate_dashboard", e)
     _log_call("generate_dashboard",
               {"title": title, "panels": len(panels or [])}, out, t0)
+    return out
+
+
+# ------------------------------------------------------------- ชั้นค้นกฎหมาย
+# ส่วนที่ 6.1: ตัวค้นกฎหมาย โหลดเมื่อถูกเรียกครั้งแรกเท่านั้น
+# ทำไมไม่โหลดตอนเปิด server: โมเดลฝังข้อความกับโมเดลจัดอันดับรวมกันกินแรมราวสี่กิกะ
+#   คำถามส่วนใหญ่เป็นคำถามสถิติที่ไม่แตะกฎหมายเลย ถ้าโหลดไว้ตั้งแต่ต้นจะกินแรมทิ้งเปล่า
+#   และเครื่องที่แรมตึงจะถูกระบบฆ่า Postgres ทิ้ง ซึ่งเจอมาแล้วตอนทำดัชนี
+# เก็บความผิดพลาดไว้ด้วย ถ้าโหลดไม่สำเร็จจะได้ไม่ลองใหม่ทุกครั้งที่ถูกเรียก
+_LAW = None
+_LAW_ERROR: str | None = None
+
+
+def _law_retriever():
+    """คืนตัวค้นกฎหมาย หรือ None ถ้ายังใช้ไม่ได้ · เหตุผลอยู่ใน _LAW_ERROR"""
+    global _LAW, _LAW_ERROR
+    if _LAW is not None or _LAW_ERROR is not None:
+        return _LAW
+    try:
+        from lawrag.retrieve import LawRetriever
+        print("[law] กำลังโหลดโมเดลและดัชนีกฎหมาย ครั้งแรกใช้เวลาสักครู่",
+              file=sys.stderr, flush=True)
+        t0 = time.time()
+        _LAW = LawRetriever(with_rerank=True, with_graph=True)
+        print("[law] พร้อมใช้งาน %d chunk ใช้เวลาโหลด %.0f วินาที"
+              % (len(_LAW.meta), time.time() - t0), file=sys.stderr, flush=True)
+    except Exception as e:
+        _LAW_ERROR = "%s: %s" % (type(e).__name__, e)
+        print("[law] โหลดไม่สำเร็จ %s" % _LAW_ERROR, file=sys.stderr, flush=True)
+    return _LAW
+
+
+# tool argument ของ search_law ดูที่พารามิเตอร์ของฟังก์ชัน
+@mcp.tool()
+def search_law(
+    question: str,  # tool argument · คำถามภาษาไทยทั้งประโยค ไม่ต้องตัดเป็นคำค้น
+    k: int = 5,  # tool argument · จำนวนข้อที่ต้องการ มากกว่า 8 มักไม่ช่วยแต่กิน context
+    method: str | None = None,  # tool argument · เว้นว่างไว้ จะใช้วิธีที่ดีที่สุดให้เอง
+) -> dict:
+    """ค้นตัวบทประกาศ กสทช. และพระราชบัญญัติ ที่เกี่ยวกับคำถาม
+
+    ใช้เมื่อคำถามเกี่ยวกับสิทธิ หน้าที่ กรอบเวลา เงื่อนไข หรือบทลงโทษ
+    เช่น ร้องเรียนแล้วต้องแก้ภายในกี่วัน ย้ายค่ายเสียค่าธรรมเนียมเท่าไหร่
+    หรือเรื่องที่ผู้ใช้เจอเข้าข่ายการเอาเปรียบผู้บริโภคตามข้อไหน
+
+    ห้ามใช้ตอบคำถามเชิงสถิติ ถ้าคำถามถามว่ามีกี่เรื่อง จังหวัดไหนมากสุด
+    หรือค่าเฉลี่ยเท่าไหร่ ให้ใช้ query_complaints ตัวเลขทุกตัวต้องมาจาก SQL
+    ห้ามเอาตัวเลขจากตัวบทกฎหมายมาตอบแทนสถิติ เพราะเป็นคนละเรื่องกัน
+
+    คำถามที่ดีคือประโยคเต็มตามที่ผู้ใช้พิมพ์ ส่งมาทั้งประโยคได้เลย
+    ตัวค้นใช้ทั้งการเทียบความหมายและการเทียบคำ การตัดเหลือคำเดี่ยว ๆ จะได้ผลแย่ลง
+
+    สิ่งที่คืนกลับ
+      law_results  รายการข้อที่เกี่ยวข้อง เรียงจากตรงที่สุด แต่ละตัวมี
+                   doc_title ชื่อประกาศ · unit หน่วย เช่น ข้อ หรือ มาตรา
+                   number เลขข้อ · excerpt ตัวบทที่ตัดมา · url ลิงก์ราชกิจจานุเบกษา
+      method_used  วิธีค้นที่ใช้จริง
+      warnings     ข้อจำกัดของผลลัพธ์ ต้องแจ้งผู้ใช้ทุกข้อ
+
+    วิธีใช้ผลลัพธ์
+      อ้างเลขข้อและชื่อประกาศทุกครั้งที่ตอบ ผู้ใช้ต้องตามไปอ่านเองได้
+      ยกข้อความจาก excerpt ห้ามเรียบเรียงใหม่จนความหมายเปลี่ยน
+      ถ้า law_results ว่าง ให้บอกตรง ๆ ว่าไม่พบ ห้ามตอบจากความรู้เดิมของตัวเอง
+
+    ข้อห้ามที่สำคัญที่สุด
+      ห้ามสรุปว่าผู้ให้บริการผิดกฎหมายหรือไม่ผิด และห้ามบอกว่าผู้ใช้จะชนะคดีหรือไม่
+      หน้าที่ของเครื่องมือนี้คือชี้ว่าเรื่องแบบนี้เกี่ยวข้องกับข้อใด
+      การวินิจฉัยเป็นอำนาจของ กสทช. ให้แนะนำผู้ใช้ไปร้องเรียนตามช่องทางจริง
+
+    เมื่อผิดพลาดแบบแก้ต่อได้ จะคืน ok เป็น false พร้อม code, error และ how_to_fix
+
+    Args:
+        question: คำถามภาษาไทยทั้งประโยค เช่น ร้องเรียนแล้วต้องได้คำตอบภายในกี่วัน
+        k: จำนวนข้อที่ต้องการ ค่าตั้งต้น 5 ใช้ได้กับคำถามส่วนใหญ่
+        method: เว้นว่างไว้เพื่อใช้ค่าตั้งต้น ระบุเองเฉพาะตอนวัดผลเทียบวิธี
+    """
+    t0 = time.time()
+    try:
+        from lawrag.retrieve import METHODS
+        use = method or "graph+rerank+ctx"
+        if use not in METHODS:
+            out = _recoverable(
+                ValueError("ไม่รู้จักวิธี %r" % use),
+                "เว้น method ว่างไว้เพื่อใช้ค่าตั้งต้น หรือเลือกจาก valid_methods",
+                valid_methods=list(METHODS))
+            _log_call("search_law", {"question": question}, out, t0)
+            return out
+
+        k = max(1, min(int(k), 20))
+        r = _law_retriever()
+        if r is None:
+            out = _recoverable(
+                RuntimeError(_LAW_ERROR or "ยังโหลดดัชนีกฎหมายไม่ได้"),
+                "ดัชนีกฎหมายยังไม่พร้อม ให้ตอบผู้ใช้ว่ายังค้นกฎหมายไม่ได้ตอนนี้ "
+                "ห้ามตอบเรื่องกฎหมายจากความรู้เดิมแทน "
+                "ผู้ดูแลระบบต้องเปิด pgvec แล้วรัน docker compose --profile tools run --rm lawrag",
+                code="LAW_INDEX_UNAVAILABLE")
+            _log_call("search_law", {"question": question}, out, t0)
+            return out
+
+        ids = r.search(question, use, k=k)
+        results = []
+        for cid in ids:
+            m = r.meta.get(cid) or {}
+            body = (m.get("body") or "").strip()
+            results.append({
+                "chunk_id": cid,
+                "doc_title": m.get("doc_title", ""),
+                "unit": m.get("unit", ""),
+                "number": m.get("number", ""),
+                # ตัดให้พอยกอ้างได้ ไม่ส่งทั้งข้อเพราะบางข้อยาวเป็นพันตัวอักษร
+                "excerpt": body[:700] + ("…" if len(body) > 700 else ""),
+                "url": m.get("url", ""),
+            })
+
+        warnings = [
+            "ผลนี้คือข้อที่เกี่ยวข้อง ไม่ใช่คำวินิจฉัยว่าผิดกฎหมายหรือไม่",
+            "คลังมีเฉพาะประกาศและ พ.ร.บ. ที่แกะข้อความได้ 21 ฉบับ ไม่ใช่กฎหมายทั้งหมดของ กสทช.",
+        ]
+        if not results:
+            warnings.append("ไม่พบข้อที่เกี่ยวข้อง ห้ามตอบจากความรู้เดิม ให้บอกผู้ใช้ว่าไม่พบ")
+
+        out = {
+            "ok": True,
+            "question": question,
+            "method_used": use,
+            "law_results": results,
+            "warnings": warnings,
+        }
+    except EXPECTED as e:  # LVL 1 แก้ต่อได้
+        out = _recoverable(e, "ตรวจว่า question เป็นข้อความ และ k เป็นจำนวนเต็ม")
+    except Exception as e:  # LVL 2 บั๊กของเรา
+        _unexpected("search_law", e)
+    _log_call("search_law", {"question": question, "k": k, "method": method}, out, t0)
     return out
 
 

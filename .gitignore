@@ -56,3 +56,6 @@ data/law/_*
 data/law/emb_*_keys.json        # กุญแจแคชเวกเตอร์ สร้างใหม่ได้
 data/law/tone_fix_cache.json        # แคชผลซ่อมวรรณยุกต์ สร้างใหม่ได้ แต่เสียเงินยิง API ซ้ำ
 data/law/tone_fix_report.csv        # รายงานการซ่อม สร้างใหม่ได้
+
+# กราฟที่รวมเส้นอนุมาน 1.3 MB สร้างใหม่ได้ด้วย python -m lawrag.ontology --infer
+data/law/law_graph_inferred.json

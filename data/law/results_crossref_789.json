@@ -1,0 +1,1353 @@
+{
+ "k": 20,
+ "n_questions": 20,
+ "methods": [
+  "rerank+ctx_embedding+bm25",
+  "graph+rerank+ctx"
+ ],
+ "summary": {
+  "rerank+ctx_embedding+bm25": {
+   "failed": 0,
+   "total": 20,
+   "failure_rate": 0.0,
+   "mean_seconds": 219.97,
+   "mean_rank_when_found": 2.9
+  },
+  "graph+rerank+ctx": {
+   "failed": 0,
+   "total": 20,
+   "failure_rate": 0.0,
+   "mean_seconds": 1.09,
+   "mean_rank_when_found": 2.9
+  }
+ },
+ "records": [
+  {
+   "id": "X01",
+   "q": "ยื่นขอย้ายค่ายแล้วค่ายเดิมไม่ยอมให้ย้าย เขาอ้างเหตุอะไรได้บ้างตามกฎหมาย",
+   "gold": [
+    "11_keyword::ข้อ_16"
+   ],
+   "kind": "cross_ref",
+   "by_method": {
+    "rerank+ctx_embedding+bm25": {
+     "method": "rerank+ctx_embedding+bm25",
+     "ids": [
+      "11_keyword::ข้อ_16",
+      "11_keyword::ข้อ_21",
+      "01_act::มาตรา_43_d1",
+      "11_keyword::ข้อ_8",
+      "11_keyword::ข้อ_10",
+      "09_act::มาตรา_9",
+      "11_keyword::preamble",
+      "11_keyword::ข้อ_19",
+      "01_act::มาตรา_43_d3",
+      "11_keyword::ข้อ_9",
+      "11_keyword::ข้อ_20",
+      "11_keyword::ข้อ_6",
+      "01_act::มาตรา_94",
+      "28_protect::ข้อ_10",
+      "11_keyword::ข้อ_25",
+      "01_act::มาตรา_92_p1",
+      "11_keyword::ข้อ_7",
+      "11_keyword::ข้อ_4",
+      "09_act::มาตรา_8",
+      "11_keyword::ข้อ_22"
+     ],
+     "hit": true,
+     "rank": 1,
+     "seconds": 272.72
+    },
+    "graph+rerank+ctx": {
+     "method": "graph+rerank+ctx",
+     "ids": [
+      "11_keyword::ข้อ_16",
+      "11_keyword::ข้อ_21",
+      "01_act::มาตรา_43_d1",
+      "11_keyword::ข้อ_8",
+      "11_keyword::ข้อ_10",
+      "09_act::มาตรา_9",
+      "11_keyword::preamble",
+      "11_keyword::ข้อ_19",
+      "01_act::มาตรา_43_d3",
+      "11_keyword::ข้อ_9",
+      "11_keyword::ข้อ_20",
+      "11_keyword::ข้อ_6",
+      "01_act::มาตรา_94",
+      "28_protect::ข้อ_10",
+      "11_keyword::ข้อ_25",
+      "11_keyword::ข้อ_12",
+      "01_act::มาตรา_43",
+      "01_act::มาตรา_43_d2",
+      "01_act::มาตรา_43_d4",
+      "01_act::มาตรา_44"
+     ],
+     "hit": true,
+     "rank": 1,
+     "seconds": 1.73
+    }
+   }
+  },
+  {
+   "id": "X02",
+   "q": "ค่ายใหม่เก็บค่าธรรมเนียมย้ายค่ายได้ แต่ถ้าค่ายเดิมปฏิเสธคำขอ ยังต้องจ่ายไหม",
+   "gold": [
+    "11_keyword::ข้อ_16",
+    "11_keyword::ข้อ_20"
+   ],
+   "kind": "cross_ref",
+   "by_method": {
+    "rerank+ctx_embedding+bm25": {
+     "method": "rerank+ctx_embedding+bm25",
+     "ids": [
+      "11_keyword::ข้อ_20",
+      "11_keyword::ข้อ_19",
+      "12_keyword::ข้อ_19",
+      "11_keyword::ข้อ_16",
+      "12_keyword::ข้อ_20",
+      "21_keyword::ข้อ_17",
+      "30_protect::ข้อ_22",
+      "11_keyword::ข้อ_8",
+      "11_keyword::ข้อ_21",
+      "11_keyword::ข้อ_15",
+      "21_keyword::ข้อ_6",
+      "11_keyword::ข้อ_17",
+      "16_keyword::ข้อ_29",
+      "30_protect::ข้อ_8",
+      "21_keyword::ข้อ_5",
+      "21_keyword::ข้อ_2",
+      "21_keyword::ภาคผนวก_1",
+      "21_keyword::ข้อ_7",
+      "12_keyword::ข้อ_18",
+      "21_keyword::ข้อ_8"
+     ],
+     "hit": true,
+     "rank": 1,
+     "seconds": 295.7
+    },
+    "graph+rerank+ctx": {
+     "method": "graph+rerank+ctx",
+     "ids": [
+      "11_keyword::ข้อ_20",
+      "11_keyword::ข้อ_19",
+      "12_keyword::ข้อ_19",
+      "11_keyword::ข้อ_16",
+      "12_keyword::ข้อ_20",
+      "21_keyword::ข้อ_17",
+      "30_protect::ข้อ_22",
+      "11_keyword::ข้อ_8",
+      "11_keyword::ข้อ_21",
+      "11_keyword::ข้อ_15",
+      "21_keyword::ข้อ_6",
+      "11_keyword::ข้อ_17",
+      "16_keyword::ข้อ_29",
+      "30_protect::ข้อ_8",
+      "21_keyword::ข้อ_5",
+      "11_keyword::ข้อ_12",
+      "21_keyword::ข้อ_2",
+      "21_keyword::ภาคผนวก_1",
+      "21_keyword::ข้อ_7",
+      "12_keyword::ข้อ_18"
+     ],
+     "hit": true,
+     "rank": 1,
+     "seconds": 2.39
+    }
+   }
+  },
+  {
+   "id": "X03",
+   "q": "รายละเอียดหลักเกณฑ์การโอนย้ายที่ค่ายต้องทำตาม ใครเป็นคนจัดทำ",
+   "gold": [
+    "11_keyword::ข้อ_12"
+   ],
+   "kind": "cross_ref",
+   "by_method": {
+    "rerank+ctx_embedding+bm25": {
+     "method": "rerank+ctx_embedding+bm25",
+     "ids": [
+      "11_keyword::ข้อ_12",
+      "11_keyword::preamble",
+      "11_keyword::ข้อ_17",
+      "11_keyword::ข้อ_19",
+      "11_keyword::ข้อ_13",
+      "11_keyword::ข้อ_10",
+      "11_keyword::ข้อ_8",
+      "01_act::มาตรา_93",
+      "11_keyword::ข้อ_22",
+      "01_act::มาตรา_92_p1",
+      "11_keyword::ข้อ_11",
+      "01_act::มาตรา_42_d2",
+      "01_act::มาตรา_81",
+      "30_protect::ข้อ_31",
+      "27_protect::ข้อ_9",
+      "01_act::มาตรา_48_d1",
+      "01_act::มาตรา_44_p1",
+      "11_keyword::ข้อ_23",
+      "01_act::มาตรา_48",
+      "10_keyword::ข้อ_7"
+     ],
+     "hit": true,
+     "rank": 1,
+     "seconds": 273.12
+    },
+    "graph+rerank+ctx": {
+     "method": "graph+rerank+ctx",
+     "ids": [
+      "11_keyword::ข้อ_12",
+      "11_keyword::preamble",
+      "11_keyword::ข้อ_17",
+      "11_keyword::ข้อ_19",
+      "11_keyword::ข้อ_13",
+      "11_keyword::ข้อ_10",
+      "11_keyword::ข้อ_8",
+      "01_act::มาตรา_93",
+      "11_keyword::ข้อ_22",
+      "01_act::มาตรา_92_p1",
+      "11_keyword::ข้อ_11",
+      "01_act::มาตรา_42_d2",
+      "01_act::มาตรา_81",
+      "30_protect::ข้อ_31",
+      "27_protect::ข้อ_9",
+      "27_protect::ข้อ_18",
+      "01_act::มาตรา_27",
+      "01_act::มาตรา_27_d1",
+      "01_act::มาตรา_27_p1",
+      "01_act::มาตรา_27_p2"
+     ],
+     "hit": true,
+     "rank": 1,
+     "seconds": 1.07
+    }
+   }
+  },
+  {
+   "id": "X04",
+   "q": "ตอนย้ายค่าย ค่ายเอาข้อมูลส่วนตัวเราไปใช้ได้แค่ไหน และต้องทำตามหลักเกณฑ์ของใคร",
+   "gold": [
+    "11_keyword::ข้อ_12",
+    "11_keyword::ข้อ_7"
+   ],
+   "kind": "cross_ref",
+   "by_method": {
+    "rerank+ctx_embedding+bm25": {
+     "method": "rerank+ctx_embedding+bm25",
+     "ids": [
+      "11_keyword::ข้อ_7",
+      "27_protect::ข้อ_8",
+      "27_protect::ข้อ_9",
+      "30_protect::ข้อ_12",
+      "27_protect::ข้อ_4",
+      "27_protect::ข้อ_6",
+      "27_protect::ข้อ_21",
+      "11_keyword::ข้อ_21",
+      "27_protect::ข้อ_10",
+      "27_protect::ข้อ_14",
+      "27_protect::ข้อ_12",
+      "11_keyword::ข้อ_19",
+      "27_protect::ข้อ_11",
+      "11_keyword::ข้อ_9",
+      "01_act::มาตรา_32_d2",
+      "01_act::มาตรา_32",
+      "11_keyword::ข้อ_8",
+      "11_keyword::ข้อ_22",
+      "27_protect::ข้อ_20",
+      "27_protect::ข้อ_7"
+     ],
+     "hit": true,
+     "rank": 1,
+     "seconds": 218.52
+    },
+    "graph+rerank+ctx": {
+     "method": "graph+rerank+ctx",
+     "ids": [
+      "11_keyword::ข้อ_7",
+      "27_protect::ข้อ_8",
+      "27_protect::ข้อ_9",
+      "30_protect::ข้อ_12",
+      "27_protect::ข้อ_4",
+      "27_protect::ข้อ_6",
+      "27_protect::ข้อ_21",
+      "11_keyword::ข้อ_21",
+      "27_protect::ข้อ_10",
+      "27_protect::ข้อ_14",
+      "27_protect::ข้อ_12",
+      "11_keyword::ข้อ_19",
+      "27_protect::ข้อ_11",
+      "11_keyword::ข้อ_9",
+      "01_act::มาตรา_32_d2",
+      "11_keyword::ข้อ_12",
+      "27_protect::ข้อ_19",
+      "01_act::มาตรา_32",
+      "11_keyword::ข้อ_8",
+      "11_keyword::ข้อ_22"
+     ],
+     "hit": true,
+     "rank": 1,
+     "seconds": 0.52
+    }
+   }
+  },
+  {
+   "id": "X05",
+   "q": "ค่ายต้องแก้เรื่องร้องเรียนให้เสร็จใน 30 วัน แล้วต้องเก็บบันทึกเรื่องที่แก้ไว้อย่างไรบ้าง",
+   "gold": [
+    "32_protect::ข้อ_27"
+   ],
+   "kind": "cross_ref",
+   "by_method": {
+    "rerank+ctx_embedding+bm25": {
+     "method": "rerank+ctx_embedding+bm25",
+     "ids": [
+      "32_protect::ข้อ_11",
+      "32_protect::ข้อ_27",
+      "32_protect::ข้อ_12",
+      "32_protect::ข้อ_9",
+      "01_act::มาตรา_30",
+      "32_protect::ข้อ_24",
+      "32_protect::ข้อ_17",
+      "27_protect::ข้อ_11",
+      "01_act::มาตรา_30_d2",
+      "32_protect::ข้อ_29",
+      "01_act::มาตรา_17_p2",
+      "32_protect::ข้อ_20",
+      "20_keyword::ข้อ_11",
+      "21_keyword::ข้อ_14",
+      "32_protect::ข้อ_10",
+      "32_protect::ข้อ_14",
+      "32_protect::ข้อ_15",
+      "32_protect::ข้อ_26",
+      "32_protect::ข้อ_18",
+      "32_protect::ข้อ_19"
+     ],
+     "hit": true,
+     "rank": 2,
+     "seconds": 200.83
+    },
+    "graph+rerank+ctx": {
+     "method": "graph+rerank+ctx",
+     "ids": [
+      "32_protect::ข้อ_11",
+      "32_protect::ข้อ_27",
+      "32_protect::ข้อ_12",
+      "32_protect::ข้อ_9",
+      "01_act::มาตรา_30",
+      "32_protect::ข้อ_24",
+      "32_protect::ข้อ_17",
+      "27_protect::ข้อ_11",
+      "01_act::มาตรา_30_d2",
+      "32_protect::ข้อ_29",
+      "01_act::มาตรา_17_p2",
+      "32_protect::ข้อ_20",
+      "20_keyword::ข้อ_11",
+      "21_keyword::ข้อ_14",
+      "32_protect::ข้อ_10",
+      "32_protect::ข้อ_7",
+      "01_act::มาตรา_30_d1",
+      "01_act::มาตรา_30_d3",
+      "01_act::มาตรา_30_d4",
+      "01_act::มาตรา_1_d5"
+     ],
+     "hit": true,
+     "rank": 2,
+     "seconds": 0.51
+    }
+   }
+  },
+  {
+   "id": "X06",
+   "q": "ค่ายต้องแจ้งรับเรื่องร้องเรียนเป็นหนังสือ แล้วคนแบบไหนบ้างที่มีสิทธิร้องเรียนตั้งแต่ต้น",
+   "gold": [
+    "32_protect::ข้อ_7"
+   ],
+   "kind": "cross_ref",
+   "by_method": {
+    "rerank+ctx_embedding+bm25": {
+     "method": "rerank+ctx_embedding+bm25",
+     "ids": [
+      "32_protect::ข้อ_9",
+      "32_protect::ข้อ_10",
+      "32_protect::ข้อ_7",
+      "32_protect::ข้อ_11",
+      "32_protect::ข้อ_8",
+      "32_protect::ข้อ_14",
+      "32_protect::ข้อ_13",
+      "30_protect::ข้อ_35",
+      "32_protect::ข้อ_15",
+      "32_protect::ข้อ_23",
+      "33_protect::ข้อ_6",
+      "32_protect::ข้อ_17",
+      "32_protect::ข้อ_24",
+      "01_act::มาตรา_30",
+      "32_protect::ข้อ_26",
+      "32_protect::ข้อ_22",
+      "32_protect::ข้อ_2",
+      "32_protect::ข้อ_29",
+      "01_act::มาตรา_30_d2",
+      "32_protect::ข้อ_27"
+     ],
+     "hit": true,
+     "rank": 3,
+     "seconds": 290.97
+    },
+    "graph+rerank+ctx": {
+     "method": "graph+rerank+ctx",
+     "ids": [
+      "32_protect::ข้อ_9",
+      "32_protect::ข้อ_10",
+      "32_protect::ข้อ_7",
+      "32_protect::ข้อ_11",
+      "32_protect::ข้อ_8",
+      "32_protect::ข้อ_14",
+      "32_protect::ข้อ_13",
+      "30_protect::ข้อ_35",
+      "32_protect::ข้อ_15",
+      "32_protect::ข้อ_23",
+      "33_protect::ข้อ_6",
+      "32_protect::ข้อ_17",
+      "32_protect::ข้อ_24",
+      "01_act::มาตรา_30",
+      "32_protect::ข้อ_26",
+      "32_protect::ข้อ_22",
+      "32_protect::ข้อ_2",
+      "32_protect::ข้อ_29",
+      "01_act::มาตรา_30_d2",
+      "32_protect::ข้อ_27"
+     ],
+     "hit": true,
+     "rank": 3,
+     "seconds": 1.87
+    }
+   }
+  },
+  {
+   "id": "X07",
+   "q": "เจรจากับค่ายจบแล้วต้องเสนอรายงาน แล้วกรอบเวลาที่ต้องเจรจาให้จบคือเท่าไหร่",
+   "gold": [
+    "32_protect::ข้อ_11"
+   ],
+   "kind": "cross_ref",
+   "by_method": {
+    "rerank+ctx_embedding+bm25": {
+     "method": "rerank+ctx_embedding+bm25",
+     "ids": [
+      "32_protect::ข้อ_12",
+      "32_protect::ข้อ_11",
+      "01_act::มาตรา_22",
+      "01_act::มาตรา_17_p2",
+      "32_protect::ข้อ_21",
+      "32_protect::ข้อ_20",
+      "09_act::มาตรา_10",
+      "01_act::มาตรา_6_d3",
+      "32_protect::ข้อ_18",
+      "26_protect::ภาคผนวก_4",
+      "01_act::มาตรา_30_d2",
+      "01_act::มาตรา_30",
+      "01_act::มาตรา_75_d1",
+      "32_protect::ข้อ_9",
+      "32_protect::ข้อ_17",
+      "32_protect::ข้อ_15",
+      "29_protect::ข้อ_5",
+      "01_act::มาตรา_75",
+      "16_keyword::ข้อ_32",
+      "11_keyword::ข้อ_10"
+     ],
+     "hit": true,
+     "rank": 2,
+     "seconds": 235.31
+    },
+    "graph+rerank+ctx": {
+     "method": "graph+rerank+ctx",
+     "ids": [
+      "32_protect::ข้อ_12",
+      "32_protect::ข้อ_11",
+      "01_act::มาตรา_22",
+      "01_act::มาตรา_17_p2",
+      "32_protect::ข้อ_21",
+      "32_protect::ข้อ_20",
+      "09_act::มาตรา_10",
+      "01_act::มาตรา_6_d3",
+      "32_protect::ข้อ_18",
+      "26_protect::ภาคผนวก_4",
+      "01_act::มาตรา_30_d2",
+      "01_act::มาตรา_30",
+      "01_act::มาตรา_75_d1",
+      "32_protect::ข้อ_9",
+      "32_protect::ข้อ_17",
+      "32_protect::ข้อ_27",
+      "01_act::มาตรา_22_d1",
+      "01_act::มาตรา_22_d2",
+      "01_act::มาตรา_22_d3",
+      "01_act::มาตรา_2228"
+     ],
+     "hit": true,
+     "rank": 2,
+     "seconds": 1.24
+    }
+   }
+  },
+  {
+   "id": "X08",
+   "q": "เลขาธิการต้องรายงานเรื่องร้องเรียนต่อคณะกรรมการ แล้วเรื่องแบบไหนที่สั่งไม่รับไว้พิจารณาได้",
+   "gold": [
+    "32_protect::ข้อ_19"
+   ],
+   "kind": "cross_ref",
+   "by_method": {
+    "rerank+ctx_embedding+bm25": {
+     "method": "rerank+ctx_embedding+bm25",
+     "ids": [
+      "32_protect::ข้อ_19",
+      "32_protect::ข้อ_20",
+      "32_protect::ข้อ_18",
+      "32_protect::ข้อ_17",
+      "32_protect::ข้อ_21",
+      "32_protect::ข้อ_10",
+      "01_act::มาตรา_30",
+      "01_act::มาตรา_30_d2",
+      "32_protect::ข้อ_5",
+      "32_protect::ข้อ_9",
+      "33_protect::ข้อ_6",
+      "01_act::มาตรา_15_d1",
+      "32_protect::ข้อ_29",
+      "32_protect::ข้อ_24",
+      "01_act::มาตรา_6_d3",
+      "32_protect::ข้อ_12",
+      "32_protect::ข้อ_7",
+      "01_act::มาตรา_15_d4",
+      "32_protect::ข้อ_27",
+      "32_protect::ข้อ_15"
+     ],
+     "hit": true,
+     "rank": 1,
+     "seconds": 225.7
+    },
+    "graph+rerank+ctx": {
+     "method": "graph+rerank+ctx",
+     "ids": [
+      "32_protect::ข้อ_19",
+      "32_protect::ข้อ_20",
+      "32_protect::ข้อ_18",
+      "32_protect::ข้อ_17",
+      "32_protect::ข้อ_21",
+      "32_protect::ข้อ_10",
+      "01_act::มาตรา_30",
+      "01_act::มาตรา_30_d2",
+      "32_protect::ข้อ_5",
+      "32_protect::ข้อ_9",
+      "33_protect::ข้อ_6",
+      "01_act::มาตรา_15_d1",
+      "32_protect::ข้อ_29",
+      "32_protect::ข้อ_24",
+      "01_act::มาตรา_6_d3",
+      "32_protect::ข้อ_11",
+      "32_protect::ข้อ_12",
+      "32_protect::ข้อ_7",
+      "01_act::มาตรา_15_d4",
+      "32_protect::ข้อ_27"
+     ],
+     "hit": true,
+     "rank": 1,
+     "seconds": 1.13
+    }
+   }
+  },
+  {
+   "id": "X09",
+   "q": "มีกรณียกเว้นที่ค่ายใช้ข้อมูลเราได้โดยไม่ต้องขอความยินยอม แล้วปกติหลักทั่วไปว่าอย่างไร",
+   "gold": [
+    "27_protect::ข้อ_6"
+   ],
+   "kind": "cross_ref",
+   "by_method": {
+    "rerank+ctx_embedding+bm25": {
+     "method": "rerank+ctx_embedding+bm25",
+     "ids": [
+      "27_protect::ข้อ_10",
+      "30_protect::ข้อ_12",
+      "27_protect::ข้อ_8",
+      "27_protect::ข้อ_6",
+      "27_protect::ข้อ_7",
+      "10_keyword::ข้อ_3",
+      "27_protect::ข้อ_12",
+      "27_protect::ข้อ_18",
+      "11_keyword::ข้อ_21",
+      "21_keyword::ข้อ_7",
+      "15_keyword::preamble",
+      "27_protect::ข้อ_5",
+      "27_protect::ข้อ_11",
+      "01_act::มาตรา_32_d2",
+      "33_protect::ข้อ_5_d1",
+      "15_keyword::ข้อ_13",
+      "27_protect::ข้อ_9",
+      "15_keyword::ข้อ_8",
+      "15_keyword::ข้อ_5",
+      "11_keyword::ข้อ_7"
+     ],
+     "hit": true,
+     "rank": 4,
+     "seconds": 189.91
+    },
+    "graph+rerank+ctx": {
+     "method": "graph+rerank+ctx",
+     "ids": [
+      "27_protect::ข้อ_10",
+      "30_protect::ข้อ_12",
+      "27_protect::ข้อ_8",
+      "27_protect::ข้อ_6",
+      "27_protect::ข้อ_7",
+      "10_keyword::ข้อ_3",
+      "27_protect::ข้อ_12",
+      "27_protect::ข้อ_18",
+      "11_keyword::ข้อ_21",
+      "21_keyword::ข้อ_7",
+      "15_keyword::preamble",
+      "27_protect::ข้อ_5",
+      "27_protect::ข้อ_11",
+      "01_act::มาตรา_32_d2",
+      "33_protect::ข้อ_5_d1",
+      "27_protect::ข้อ_19",
+      "15_keyword::ข้อ_13",
+      "27_protect::ข้อ_9",
+      "15_keyword::ข้อ_8",
+      "15_keyword::ข้อ_5"
+     ],
+     "hit": true,
+     "rank": 4,
+     "seconds": 1.81
+    }
+   }
+  },
+  {
+   "id": "X10",
+   "q": "ค่ายห้ามเก็บข้อมูลอ่อนไหวของเรา แล้วมีกรณีไหนบ้างที่ได้รับยกเว้น",
+   "gold": [
+    "27_protect::ข้อ_8",
+    "27_protect::ข้อ_7"
+   ],
+   "kind": "cross_ref",
+   "by_method": {
+    "rerank+ctx_embedding+bm25": {
+     "method": "rerank+ctx_embedding+bm25",
+     "ids": [
+      "27_protect::ข้อ_8",
+      "27_protect::ข้อ_7",
+      "27_protect::ข้อ_10",
+      "27_protect::ข้อ_21",
+      "27_protect::ข้อ_11",
+      "27_protect::ข้อ_4",
+      "27_protect::ข้อ_6",
+      "27_protect::ข้อ_12",
+      "01_act::มาตรา_32",
+      "01_act::มาตรา_32_d2",
+      "11_keyword::ข้อ_21",
+      "16_keyword::ข้อ_21",
+      "27_protect::ข้อ_20",
+      "30_protect::ข้อ_6",
+      "30_protect::ข้อ_12",
+      "27_protect::ข้อ_9",
+      "27_protect::ข้อ_17",
+      "12_keyword::ข้อ_19",
+      "09_act::มาตรา_5",
+      "11_keyword::ข้อ_7"
+     ],
+     "hit": true,
+     "rank": 1,
+     "seconds": 177.46
+    },
+    "graph+rerank+ctx": {
+     "method": "graph+rerank+ctx",
+     "ids": [
+      "27_protect::ข้อ_8",
+      "27_protect::ข้อ_7",
+      "27_protect::ข้อ_10",
+      "27_protect::ข้อ_21",
+      "27_protect::ข้อ_11",
+      "27_protect::ข้อ_4",
+      "27_protect::ข้อ_6",
+      "27_protect::ข้อ_12",
+      "01_act::มาตรา_32",
+      "01_act::มาตรา_32_d2",
+      "11_keyword::ข้อ_21",
+      "16_keyword::ข้อ_21",
+      "27_protect::ข้อ_20",
+      "30_protect::ข้อ_6",
+      "30_protect::ข้อ_12",
+      "27_protect::ข้อ_19",
+      "27_protect::ข้อ_9",
+      "27_protect::ข้อ_17",
+      "12_keyword::ข้อ_19",
+      "09_act::มาตรา_5"
+     ],
+     "hit": true,
+     "rank": 1,
+     "seconds": 0.7
+    }
+   }
+  },
+  {
+   "id": "X11",
+   "q": "ค่ายจะส่งข้อมูลเราไปต่างประเทศ ต้องทำตามเงื่อนไขอะไรบ้างนอกจากกฎข้อส่งออก",
+   "gold": [
+    "27_protect::ข้อ_6",
+    "27_protect::ข้อ_8"
+   ],
+   "kind": "cross_ref",
+   "by_method": {
+    "rerank+ctx_embedding+bm25": {
+     "method": "rerank+ctx_embedding+bm25",
+     "ids": [
+      "27_protect::ข้อ_9",
+      "27_protect::ข้อ_8",
+      "27_protect::ข้อ_19",
+      "27_protect::ข้อ_21",
+      "27_protect::ข้อ_20",
+      "27_protect::ข้อ_7",
+      "27_protect::ข้อ_6",
+      "30_protect::ข้อ_12",
+      "27_protect::ข้อ_18",
+      "27_protect::ข้อ_10",
+      "21_keyword::ข้อ_7",
+      "33_protect::ข้อ_5_d1",
+      "01_act::มาตรา_27_d4",
+      "30_protect::ข้อ_5",
+      "01_act::มาตรา_75_d1",
+      "09_act::มาตรา_11",
+      "16_keyword::ข้อ_21",
+      "01_act::มาตรา_27_p2_d1",
+      "11_keyword::ข้อ_7",
+      "01_act::มาตรา_75"
+     ],
+     "hit": true,
+     "rank": 2,
+     "seconds": 210.75
+    },
+    "graph+rerank+ctx": {
+     "method": "graph+rerank+ctx",
+     "ids": [
+      "27_protect::ข้อ_9",
+      "27_protect::ข้อ_8",
+      "27_protect::ข้อ_19",
+      "27_protect::ข้อ_21",
+      "27_protect::ข้อ_20",
+      "27_protect::ข้อ_7",
+      "27_protect::ข้อ_6",
+      "30_protect::ข้อ_12",
+      "27_protect::ข้อ_18",
+      "27_protect::ข้อ_10",
+      "21_keyword::ข้อ_7",
+      "33_protect::ข้อ_5_d1",
+      "01_act::มาตรา_27_d4",
+      "30_protect::ข้อ_5",
+      "01_act::มาตรา_75_d1",
+      "27_protect::ข้อ_11",
+      "27_protect::ข้อ_12",
+      "27_protect::ข้อ_13",
+      "09_act::มาตรา_11",
+      "16_keyword::ข้อ_21"
+     ],
+     "hit": true,
+     "rank": 2,
+     "seconds": 0.69
+    }
+   }
+  },
+  {
+   "id": "X12",
+   "q": "อยากให้ค่ายลบข้อมูลเรา ต้องใช้สิทธิภายในกี่วัน และข้อมูลถูกเก็บไว้นานแค่ไหน",
+   "gold": [
+    "27_protect::ข้อ_11"
+   ],
+   "kind": "cross_ref",
+   "by_method": {
+    "rerank+ctx_embedding+bm25": {
+     "method": "rerank+ctx_embedding+bm25",
+     "ids": [
+      "27_protect::ข้อ_11",
+      "27_protect::ข้อ_12",
+      "27_protect::ข้อ_10",
+      "27_protect::ข้อ_20",
+      "30_protect::ข้อ_22",
+      "27_protect::ข้อ_14",
+      "32_protect::ข้อ_27",
+      "27_protect::ข้อ_21",
+      "27_protect::ข้อ_6",
+      "29_protect::ข้อ_7",
+      "30_protect::ข้อ_23",
+      "15_keyword::ข้อ_11",
+      "29_protect::ข้อ_6",
+      "27_protect::ข้อ_1",
+      "11_keyword::ข้อ_10",
+      "15_keyword::ข้อ_5",
+      "30_protect::ข้อ_6",
+      "27_protect::ข้อ_13",
+      "10_keyword::ข้อ_8",
+      "14_keyword::ข้อ_14"
+     ],
+     "hit": true,
+     "rank": 1,
+     "seconds": 230.4
+    },
+    "graph+rerank+ctx": {
+     "method": "graph+rerank+ctx",
+     "ids": [
+      "27_protect::ข้อ_11",
+      "27_protect::ข้อ_12",
+      "27_protect::ข้อ_10",
+      "27_protect::ข้อ_20",
+      "30_protect::ข้อ_22",
+      "27_protect::ข้อ_14",
+      "32_protect::ข้อ_27",
+      "27_protect::ข้อ_21",
+      "27_protect::ข้อ_6",
+      "29_protect::ข้อ_7",
+      "30_protect::ข้อ_23",
+      "15_keyword::ข้อ_11",
+      "29_protect::ข้อ_6",
+      "27_protect::ข้อ_1",
+      "11_keyword::ข้อ_10",
+      "27_protect::ข้อ_7",
+      "27_protect::ข้อ_19",
+      "30_protect::ข้อ_16",
+      "15_keyword::ข้อ_5",
+      "30_protect::ข้อ_6"
+     ],
+     "hit": true,
+     "rank": 1,
+     "seconds": 0.49
+    }
+   }
+  },
+  {
+   "id": "X13",
+   "q": "นโยบายคุ้มครองข้อมูลส่วนบุคคลที่ค่ายต้องประกาศ ต้องครอบคลุมสิทธิร้องเรียนด้วยไหม",
+   "gold": [
+    "27_protect::ข้อ_13"
+   ],
+   "kind": "cross_ref",
+   "by_method": {
+    "rerank+ctx_embedding+bm25": {
+     "method": "rerank+ctx_embedding+bm25",
+     "ids": [
+      "27_protect::ข้อ_20",
+      "27_protect::ข้อ_13",
+      "27_protect::ข้อ_11",
+      "32_protect::ข้อ_27",
+      "32_protect::preamble",
+      "27_protect::ข้อ_3",
+      "32_protect::ข้อ_25",
+      "27_protect::ข้อ_4",
+      "32_protect::ข้อ_26",
+      "27_protect::preamble",
+      "27_protect::ข้อ_12",
+      "27_protect::ข้อ_2",
+      "27_protect::ข้อ_14",
+      "27_protect::ข้อ_21",
+      "27_protect::ข้อ_17",
+      "27_protect::ข้อ_1",
+      "27_protect::ข้อ_10",
+      "27_protect::ข้อ_6",
+      "27_protect::ข้อ_15",
+      "27_protect::ข้อ_8"
+     ],
+     "hit": true,
+     "rank": 2,
+     "seconds": 199.52
+    },
+    "graph+rerank+ctx": {
+     "method": "graph+rerank+ctx",
+     "ids": [
+      "27_protect::ข้อ_20",
+      "27_protect::ข้อ_13",
+      "27_protect::ข้อ_11",
+      "32_protect::ข้อ_27",
+      "32_protect::preamble",
+      "27_protect::ข้อ_3",
+      "32_protect::ข้อ_25",
+      "27_protect::ข้อ_4",
+      "32_protect::ข้อ_26",
+      "27_protect::preamble",
+      "27_protect::ข้อ_12",
+      "27_protect::ข้อ_2",
+      "27_protect::ข้อ_14",
+      "27_protect::ข้อ_21",
+      "27_protect::ข้อ_17",
+      "27_protect::ข้อ_19",
+      "17_keyword::preamble",
+      "18_keyword::preamble",
+      "24_keyword::preamble",
+      "28_protect::preamble"
+     ],
+     "hit": true,
+     "rank": 2,
+     "seconds": 0.25
+    }
+   }
+  },
+  {
+   "id": "X14",
+   "q": "ค่ายจะแก้หลักเกณฑ์การเก็บเงินล่วงหน้า ต้องขอความเห็นชอบจากใครเหมือนตอนขอครั้งแรกไหม",
+   "gold": [
+    "20_keyword::ข้อ_4"
+   ],
+   "kind": "cross_ref",
+   "by_method": {
+    "rerank+ctx_embedding+bm25": {
+     "method": "rerank+ctx_embedding+bm25",
+     "ids": [
+      "16_keyword::ข้อ_29",
+      "21_keyword::ข้อ_6",
+      "21_keyword::ข้อ_5",
+      "20_keyword::ข้อ_5",
+      "16_keyword::ข้อ_28",
+      "21_keyword::ข้อ_17",
+      "20_keyword::ข้อ_4",
+      "16_keyword::ข้อ_30",
+      "21_keyword::ข้อ_7",
+      "21_keyword::ข้อ_8",
+      "21_keyword::ข้อ_15",
+      "21_keyword::ข้อ_9",
+      "21_keyword::ภาคผนวก_1",
+      "20_keyword::ข้อ_12",
+      "20_keyword::ข้อ_7",
+      "21_keyword::ข้อ_13",
+      "21_keyword::ข้อ_12",
+      "20_keyword::ข้อ_15",
+      "21_keyword::ข้อ_4",
+      "16_keyword::ข้อ_26"
+     ],
+     "hit": true,
+     "rank": 7,
+     "seconds": 161.81
+    },
+    "graph+rerank+ctx": {
+     "method": "graph+rerank+ctx",
+     "ids": [
+      "16_keyword::ข้อ_29",
+      "21_keyword::ข้อ_6",
+      "21_keyword::ข้อ_5",
+      "20_keyword::ข้อ_5",
+      "16_keyword::ข้อ_28",
+      "21_keyword::ข้อ_17",
+      "20_keyword::ข้อ_4",
+      "16_keyword::ข้อ_30",
+      "21_keyword::ข้อ_7",
+      "21_keyword::ข้อ_8",
+      "21_keyword::ข้อ_15",
+      "21_keyword::ข้อ_9",
+      "21_keyword::ภาคผนวก_1",
+      "20_keyword::ข้อ_12",
+      "20_keyword::ข้อ_7",
+      "21_keyword::ข้อ_13",
+      "21_keyword::ข้อ_12",
+      "20_keyword::ข้อ_15",
+      "21_keyword::ข้อ_4",
+      "16_keyword::ข้อ_26"
+     ],
+     "hit": true,
+     "rank": 7,
+     "seconds": 0.53
+    }
+   }
+  },
+  {
+   "id": "X15",
+   "q": "กสทช. เห็นชอบให้เก็บเงินล่วงหน้าแล้ว ค่ายต้องทำอะไรต่อ และเดิมต้องขอความเห็นชอบอย่างไร",
+   "gold": [
+    "20_keyword::ข้อ_4",
+    "20_keyword::ข้อ_5"
+   ],
+   "kind": "cross_ref",
+   "by_method": {
+    "rerank+ctx_embedding+bm25": {
+     "method": "rerank+ctx_embedding+bm25",
+     "ids": [
+      "21_keyword::ข้อ_5",
+      "21_keyword::ข้อ_6",
+      "21_keyword::ข้อ_17",
+      "20_keyword::ข้อ_4",
+      "20_keyword::ข้อ_5",
+      "16_keyword::ข้อ_29",
+      "21_keyword::ข้อ_15",
+      "20_keyword::ข้อ_12",
+      "16_keyword::ข้อ_28",
+      "21_keyword::ข้อ_7",
+      "21_keyword::ข้อ_8",
+      "21_keyword::ข้อ_9",
+      "16_keyword::ข้อ_30",
+      "20_keyword::ข้อ_14",
+      "20_keyword::ข้อ_15",
+      "21_keyword::ภาคผนวก_1",
+      "21_keyword::ข้อ_12",
+      "21_keyword::ข้อ_16",
+      "20_keyword::ข้อ_7",
+      "20_keyword::ข้อ_13"
+     ],
+     "hit": true,
+     "rank": 4,
+     "seconds": 167.04
+    },
+    "graph+rerank+ctx": {
+     "method": "graph+rerank+ctx",
+     "ids": [
+      "21_keyword::ข้อ_5",
+      "21_keyword::ข้อ_6",
+      "21_keyword::ข้อ_17",
+      "20_keyword::ข้อ_4",
+      "20_keyword::ข้อ_5",
+      "16_keyword::ข้อ_29",
+      "21_keyword::ข้อ_15",
+      "20_keyword::ข้อ_12",
+      "16_keyword::ข้อ_28",
+      "21_keyword::ข้อ_7",
+      "21_keyword::ข้อ_8",
+      "21_keyword::ข้อ_9",
+      "16_keyword::ข้อ_30",
+      "20_keyword::ข้อ_14",
+      "20_keyword::ข้อ_15",
+      "21_keyword::ภาคผนวก_1",
+      "21_keyword::ข้อ_12",
+      "21_keyword::ข้อ_16",
+      "20_keyword::ข้อ_7",
+      "20_keyword::ข้อ_13"
+     ],
+     "hit": true,
+     "rank": 4,
+     "seconds": 0.15
+    }
+   }
+  },
+  {
+   "id": "X16",
+   "q": "ถ้าจะเก็บเงินล่วงหน้า ต้องให้ทางเลือกผู้ใช้บริการด้วย แล้วต้องผ่านการเห็นชอบก่อนหรือเปล่า",
+   "gold": [
+    "20_keyword::ข้อ_4"
+   ],
+   "kind": "cross_ref",
+   "by_method": {
+    "rerank+ctx_embedding+bm25": {
+     "method": "rerank+ctx_embedding+bm25",
+     "ids": [
+      "21_keyword::ข้อ_8",
+      "20_keyword::ข้อ_7",
+      "21_keyword::ข้อ_7",
+      "30_protect::ข้อ_11",
+      "16_keyword::ข้อ_28",
+      "16_keyword::ข้อ_30",
+      "16_keyword::ข้อ_29",
+      "21_keyword::ข้อ_5",
+      "21_keyword::ภาคผนวก_1",
+      "20_keyword::ข้อ_4",
+      "21_keyword::ข้อ_15",
+      "20_keyword::ข้อ_12",
+      "21_keyword::ข้อ_6",
+      "20_keyword::ข้อ_5",
+      "21_keyword::ข้อ_17",
+      "16_keyword::ข้อ_27",
+      "21_keyword::ข้อ_12",
+      "21_keyword::ข้อ_9",
+      "21_keyword::ข้อ_13",
+      "20_keyword::ข้อ_14"
+     ],
+     "hit": true,
+     "rank": 10,
+     "seconds": 145.72
+    },
+    "graph+rerank+ctx": {
+     "method": "graph+rerank+ctx",
+     "ids": [
+      "21_keyword::ข้อ_8",
+      "20_keyword::ข้อ_7",
+      "21_keyword::ข้อ_7",
+      "30_protect::ข้อ_11",
+      "16_keyword::ข้อ_28",
+      "16_keyword::ข้อ_30",
+      "16_keyword::ข้อ_29",
+      "21_keyword::ข้อ_5",
+      "21_keyword::ภาคผนวก_1",
+      "20_keyword::ข้อ_4",
+      "21_keyword::ข้อ_15",
+      "20_keyword::ข้อ_12",
+      "21_keyword::ข้อ_6",
+      "20_keyword::ข้อ_5",
+      "21_keyword::ข้อ_17",
+      "16_keyword::ข้อ_27",
+      "21_keyword::ข้อ_12",
+      "21_keyword::ข้อ_9",
+      "21_keyword::ข้อ_13",
+      "20_keyword::ข้อ_14"
+     ],
+     "hit": true,
+     "rank": 10,
+     "seconds": 0.33
+    }
+   }
+  },
+  {
+   "id": "X17",
+   "q": "ค่ายต้องมีรายการส่งเสริมการขายขั้นเริ่มต้น ถ้าตรวจพบว่ากำหนดอัตราไม่ถูกต้องจะเป็นอย่างไร",
+   "gold": [
+    "12_keyword::ข้อ_8",
+    "12_keyword::ข้อ_10"
+   ],
+   "kind": "cross_ref",
+   "by_method": {
+    "rerank+ctx_embedding+bm25": {
+     "method": "rerank+ctx_embedding+bm25",
+     "ids": [
+      "12_keyword::ข้อ_8",
+      "12_keyword::ข้อ_10",
+      "12_keyword::ข้อ_18",
+      "13_keyword::ข้อ_6",
+      "12_keyword::ข้อ_22",
+      "13_keyword::preamble",
+      "12_keyword::ภาคผนวก_1",
+      "12_keyword::ข้อ_13",
+      "13_keyword::ข้อ_7",
+      "13_keyword::ข้อ_3",
+      "12_keyword::ข้อ_3",
+      "12_keyword::ข้อ_16",
+      "12_keyword::ข้อ_6",
+      "13_keyword::ข้อ_4",
+      "13_keyword::ข้อ_8",
+      "12_keyword::ข้อ_7",
+      "13_keyword::ข้อ_5",
+      "12_keyword::ข้อ_9",
+      "12_keyword::ข้อ_19",
+      "13_keyword::ภาคผนวก_1"
+     ],
+     "hit": true,
+     "rank": 1,
+     "seconds": 198.9
+    },
+    "graph+rerank+ctx": {
+     "method": "graph+rerank+ctx",
+     "ids": [
+      "12_keyword::ข้อ_8",
+      "12_keyword::ข้อ_10",
+      "12_keyword::ข้อ_18",
+      "13_keyword::ข้อ_6",
+      "12_keyword::ข้อ_22",
+      "13_keyword::preamble",
+      "12_keyword::ภาคผนวก_1",
+      "12_keyword::ข้อ_13",
+      "13_keyword::ข้อ_7",
+      "13_keyword::ข้อ_3",
+      "12_keyword::ข้อ_3",
+      "12_keyword::ข้อ_16",
+      "12_keyword::ข้อ_6",
+      "13_keyword::ข้อ_4",
+      "13_keyword::ข้อ_8",
+      "12_keyword::ข้อ_4",
+      "12_keyword::ข้อ_7",
+      "13_keyword::ข้อ_5",
+      "12_keyword::ข้อ_9",
+      "12_keyword::ข้อ_19"
+     ],
+     "hit": true,
+     "rank": 1,
+     "seconds": 0.34
+    }
+   }
+  },
+  {
+   "id": "X18",
+   "q": "สำนักงานตรวจโครงสร้างอัตราค่าบริการของค่าย แล้วโครงสร้างที่ว่านั้นกำหนดไว้ว่าอย่างไร",
+   "gold": [
+    "12_keyword::ข้อ_6"
+   ],
+   "kind": "cross_ref",
+   "by_method": {
+    "rerank+ctx_embedding+bm25": {
+     "method": "rerank+ctx_embedding+bm25",
+     "ids": [
+      "12_keyword::ข้อ_9",
+      "12_keyword::preamble",
+      "12_keyword::ข้อ_5",
+      "12_keyword::ข้อ_11",
+      "12_keyword::ข้อ_10",
+      "12_keyword::ข้อ_21",
+      "12_keyword::ข้อ_7",
+      "12_keyword::ข้อ_13",
+      "21_keyword::ข้อ_16",
+      "16_keyword::ข้อ_32",
+      "12_keyword::ข้อ_6",
+      "12_keyword::ข้อ_2",
+      "16_keyword::ข้อ_7",
+      "12_keyword::ข้อ_8",
+      "12_keyword::ข้อ_12",
+      "12_keyword::ข้อ_16",
+      "12_keyword::ข้อ_22",
+      "20_keyword::ข้อ_13",
+      "12_keyword::ภาคผนวก_1",
+      "16_keyword::ข้อ_33"
+     ],
+     "hit": true,
+     "rank": 11,
+     "seconds": 190.01
+    },
+    "graph+rerank+ctx": {
+     "method": "graph+rerank+ctx",
+     "ids": [
+      "12_keyword::ข้อ_9",
+      "12_keyword::preamble",
+      "12_keyword::ข้อ_5",
+      "12_keyword::ข้อ_11",
+      "12_keyword::ข้อ_10",
+      "12_keyword::ข้อ_21",
+      "12_keyword::ข้อ_7",
+      "12_keyword::ข้อ_13",
+      "21_keyword::ข้อ_16",
+      "16_keyword::ข้อ_32",
+      "12_keyword::ข้อ_6",
+      "12_keyword::ข้อ_2",
+      "16_keyword::ข้อ_7",
+      "12_keyword::ข้อ_8",
+      "12_keyword::ข้อ_12",
+      "01_act::มาตรา_27",
+      "01_act::มาตรา_27_d1",
+      "01_act::มาตรา_27_p1",
+      "01_act::มาตรา_27_p2",
+      "01_act::มาตรา_27_d2"
+     ],
+     "hit": true,
+     "rank": 11,
+     "seconds": 0.76
+    }
+   }
+  },
+  {
+   "id": "X19",
+   "q": "คำว่าผู้รับใบอนุญาตในประกาศเรื่องโครงสร้างอัตราค่าบริการ หมายถึงใครบ้าง",
+   "gold": [
+    "12_keyword::ข้อ_4"
+   ],
+   "kind": "cross_ref",
+   "by_method": {
+    "rerank+ctx_embedding+bm25": {
+     "method": "rerank+ctx_embedding+bm25",
+     "ids": [
+      "12_keyword::ข้อ_4",
+      "12_keyword::ข้อ_3",
+      "13_keyword::ข้อ_3",
+      "16_keyword::ข้อ_3",
+      "15_keyword::ข้อ_4",
+      "12_keyword::ข้อ_13",
+      "19_keyword::ข้อ_2",
+      "16_keyword::ข้อ_33",
+      "16_keyword::ข้อ_7",
+      "12_keyword::ข้อ_22",
+      "12_keyword::ข้อ_10",
+      "18_keyword::ข้อ_4",
+      "12_keyword::ข้อ_11",
+      "12_keyword::preamble",
+      "16_keyword::ข้อ_32",
+      "16_keyword::ข้อ_16",
+      "12_keyword::ข้อ_9",
+      "10_keyword::ข้อ_4",
+      "12_keyword::ข้อ_6",
+      "16_keyword::ข้อ_31"
+     ],
+     "hit": true,
+     "rank": 1,
+     "seconds": 188.03
+    },
+    "graph+rerank+ctx": {
+     "method": "graph+rerank+ctx",
+     "ids": [
+      "12_keyword::ข้อ_4",
+      "12_keyword::ข้อ_3",
+      "13_keyword::ข้อ_3",
+      "16_keyword::ข้อ_3",
+      "15_keyword::ข้อ_4",
+      "12_keyword::ข้อ_13",
+      "19_keyword::ข้อ_2",
+      "16_keyword::ข้อ_33",
+      "16_keyword::ข้อ_7",
+      "12_keyword::ข้อ_22",
+      "12_keyword::ข้อ_10",
+      "18_keyword::ข้อ_4",
+      "12_keyword::ข้อ_11",
+      "12_keyword::preamble",
+      "16_keyword::ข้อ_32",
+      "14_keyword::ข้อ_2",
+      "17_keyword::ข้อ_4",
+      "26_protect::ข้อ_3",
+      "27_protect::ข้อ_5",
+      "16_keyword::ข้อ_16"
+     ],
+     "hit": true,
+     "rank": 1,
+     "seconds": 1.18
+    }
+   }
+  },
+  {
+   "id": "X20",
+   "q": "ค่ายยื่นคำขอหยุดให้บริการต้องแนบรายละเอียดอะไร และก่อนหน้านั้นต้องขออนุญาตแบบไหน",
+   "gold": [
+    "10_keyword::ข้อ_6"
+   ],
+   "kind": "cross_ref",
+   "by_method": {
+    "rerank+ctx_embedding+bm25": {
+     "method": "rerank+ctx_embedding+bm25",
+     "ids": [
+      "10_keyword::ข้อ_7",
+      "10_keyword::ข้อ_6",
+      "10_keyword::ข้อ_5",
+      "10_keyword::ข้อ_10",
+      "29_protect::ข้อ_6",
+      "10_keyword::ข้อ_8",
+      "10_keyword::ข้อ_3",
+      "10_keyword::ข้อ_9",
+      "10_keyword::preamble",
+      "15_keyword::ข้อ_9",
+      "35_keyword::ข้อ_3",
+      "21_keyword::ข้อ_5",
+      "10_keyword::ข้อ_4",
+      "21_keyword::ข้อ_6",
+      "28_protect::ข้อ_9",
+      "16_keyword::ข้อ_29",
+      "35_keyword::ข้อ_5",
+      "09_act::มาตรา_11",
+      "20_keyword::ข้อ_4",
+      "01_act::มาตรา_4360"
+     ],
+     "hit": true,
+     "rank": 2,
+     "seconds": 327.03
+    },
+    "graph+rerank+ctx": {
+     "method": "graph+rerank+ctx",
+     "ids": [
+      "10_keyword::ข้อ_7",
+      "10_keyword::ข้อ_6",
+      "10_keyword::ข้อ_5",
+      "10_keyword::ข้อ_10",
+      "29_protect::ข้อ_6",
+      "10_keyword::ข้อ_8",
+      "10_keyword::ข้อ_3",
+      "10_keyword::ข้อ_9",
+      "10_keyword::preamble",
+      "15_keyword::ข้อ_9",
+      "35_keyword::ข้อ_3",
+      "21_keyword::ข้อ_5",
+      "10_keyword::ข้อ_4",
+      "21_keyword::ข้อ_6",
+      "28_protect::ข้อ_9",
+      "16_keyword::ข้อ_29",
+      "35_keyword::ข้อ_5",
+      "09_act::มาตรา_11",
+      "20_keyword::ข้อ_4",
+      "01_act::มาตรา_4360"
+     ],
+     "hit": true,
+     "rank": 2,
+     "seconds": 4.06
+    }
+   }
+  }
+ ],
+ "total_seconds": 3155.2
+}

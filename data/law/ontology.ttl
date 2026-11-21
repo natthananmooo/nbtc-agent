@@ -1,0 +1,136 @@
+# data/law/ontology.ttl - ออนโทโลยีของคลังกฎหมายโทรคมนาคม
+#
+# ทำไมต้องเขียนไฟล์นี้ ทั้งที่กราฟก็ทำงานอยู่แล้ว
+#     กราฟใน law_graph.json บอกได้แค่ว่า "มีเส้นชนิดนี้อยู่จริง" แต่บอกไม่ได้ว่า
+#     "เส้นชนิดนี้อนุญาตให้ลากจากอะไรไปอะไร" ความรู้ข้อหลังอยู่ในหัวคนเขียนโค้ด
+#     อย่างเดียว ใครมาอ่านต่อหรือเพิ่มเส้นใหม่ก็ลากผิดได้โดยไม่มีอะไรเตือน
+#     ไฟล์นี้ย้ายความรู้ข้อนั้นออกจากหัวคนมาเป็นข้อความที่เครื่องตรวจได้
+#     แล้ว lawrag/ontology.py เอาไปเทียบกับกราฟจริงทุกครั้งที่สร้างกราฟใหม่
+#
+# ต่างจาก taxonomy อย่างไร
+#     taxonomy บอกได้แค่ว่าอะไรเป็นชนิดย่อยของอะไร เป็นต้นไม้ชั้นเดียว
+#     ออนโทโลยีบอก "ความสัมพันธ์" ด้วย และความสัมพันธ์มีต้นทางปลายทางกำกับไว้
+#     ที่สำคัญกว่านั้นคือมันอนุมานได้ บรรทัด nbtc:citesAct ข้างล่างไม่มีอยู่ใน
+#     กราฟต้นฉบับเลยแม้แต่เส้นเดียว แต่อนุมานออกมาได้ 441 เส้นจากเส้นที่มีอยู่
+#
+# ขอบเขตที่ซื่อสัตย์
+#     เราประกาศด้วยคำศัพท์ OWL แต่ไม่ได้รัน reasoner มาตรฐานอย่าง HermiT หรือ Pellet
+#     ตัวตรวจของเราอ่านไฟล์นี้แล้วบังคับใช้เอง เหตุผลอยู่ใน lawrag/ontology.py
+#     สิ่งที่ประกาศไว้ทุกบรรทัดในไฟล์นี้ยืนยันแล้วว่าเป็นจริงกับกราฟจริง
+#     ไม่ได้ลอกมาจากตำรา
+
+@prefix nbtc: <https://github.com/natthananmooo/nbtc-agent/ontology/law#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+nbtc: a owl:Ontology ;
+    rdfs:label "ออนโทโลยีคลังกฎหมายกิจการโทรคมนาคม" ;
+    rdfs:comment "ประกาศคลาสและความสัมพันธ์ของกราฟความรู้ที่สร้างจาก lawrag/lawgraph.py" .
+
+# ส่วนที่ 1: คลาส
+# ห้าคลาสนี้คือค่าในฟิลด์ label ของทุก node ใน law_graph.json ไม่มีคลาสอื่น
+
+nbtc:Document a owl:Class ;
+    rdfs:label "Document" ;
+    rdfs:comment "เอกสารกฎหมายหนึ่งฉบับ หนึ่งไฟล์ PDF ต่อหนึ่ง node เช่นประกาศ กสทช. หนึ่งเรื่อง" .
+
+nbtc:Act a owl:Class ;
+    rdfs:label "Act" ;
+    rdfs:comment "พระราชบัญญัติที่ถูกอ้างถึง เป็น node แยกจาก Document เพราะ พ.ร.บ. ถูกอ้างจากหลายฉบับ แต่ตัว พ.ร.บ. เองอาจไม่ได้อยู่ในคลัง" .
+
+nbtc:ActSection a owl:Class ;
+    rdfs:label "ActSection" ;
+    rdfs:comment "มาตราหนึ่งมาตราของ พ.ร.บ. หนึ่งฉบับ เป็นหน่วยที่ตัวบทอื่นอ้างถึงเพื่อขออำนาจหรือชี้บทลงโทษ" .
+
+nbtc:Chunk a owl:Class ;
+    rdfs:label "Chunk" ;
+    rdfs:comment "ก้อนตัวบทที่ตัดตามหัวข้อ เป็นหน่วยที่เอาไปทำเวกเตอร์และเป็นหน่วยที่ระบบคืนเป็นคำตอบ" .
+
+nbtc:Definition a owl:Class ;
+    rdfs:label "Definition" ;
+    rdfs:comment "ศัพท์ที่ตัวบทนิยามไว้เอง จับจากรูปประโยค คำว่า ... หมายความว่า" .
+
+# ห้าคลาสนี้ไม่ทับกัน node หนึ่งตัวมีคลาสเดียว ตัวตรวจบังคับข้อนี้
+[] a owl:AllDisjointClasses ;
+    owl:members ( nbtc:Document nbtc:Act nbtc:ActSection nbtc:Chunk nbtc:Definition ) .
+
+# ส่วนที่ 2: ความสัมพันธ์ เจ็ดชนิดที่มีอยู่จริงในกราฟ
+# domain คือคลาสของต้นทาง range คือคลาสของปลายทาง ตัวตรวจบังคับทั้งสองข้าง
+
+nbtc:contains a owl:ObjectProperty ;
+    rdfs:label "CONTAINS" ;
+    rdfs:domain nbtc:Document ;
+    rdfs:range nbtc:Chunk ;
+    nbtc:requiredForEveryRange "true" ;
+    rdfs:comment "เอกสารฉบับนี้ประกอบด้วยก้อนตัวบทก้อนนี้ ทุก Chunk ต้องมีเส้นนี้เข้าหนึ่งเส้น ไม่มีก้อนลอย เงื่อนไขนี้เขียนเป็น nbtc:requiredForEveryRange เพราะข้อบังคับ cardinality ฝั่งผกผันเขียนใน Turtle แล้วตัวอ่านของเราไม่รองรับ จึงประกาศเป็นคำศัพท์ของเราเองให้ตัวตรวจบังคับ" .
+
+nbtc:sectionOf a owl:ObjectProperty , owl:FunctionalProperty ;
+    rdfs:label "SECTION_OF" ;
+    rdfs:domain nbtc:ActSection ;
+    rdfs:range nbtc:Act ;
+    rdfs:comment "มาตรานี้เป็นมาตราของ พ.ร.บ. ฉบับนี้ ประกาศเป็น FunctionalProperty เพราะมาตราหนึ่งสังกัด พ.ร.บ. ได้ฉบับเดียว ตรวจกับกราฟจริงแล้วไม่มีมาตราใดสังกัดสองฉบับ" .
+
+nbtc:textOf a owl:ObjectProperty ;
+    rdfs:label "TEXT_OF" ;
+    rdfs:domain nbtc:ActSection ;
+    rdfs:range nbtc:Chunk ;
+    rdfs:comment "ตัวบทของมาตรานี้อยู่ในก้อนนี้ ไม่ใช่ FunctionalProperty เพราะมาตราเดียวปรากฏได้หลายก้อน ฉบับรวมแก้ไขพิมพ์มาตราเดิมซ้ำ มากสุดที่พบคือสิบหกก้อน" .
+
+nbtc:authorizedBy a owl:ObjectProperty ;
+    rdfs:label "AUTHORIZED_BY" ;
+    rdfs:domain nbtc:Document ;
+    rdfs:range nbtc:ActSection ;
+    rdfs:comment "ประกาศฉบับนี้ออกโดยอาศัยอำนาจตามมาตรานี้ จับจากวรรค อาศัยอำนาจตามความในมาตรา ... แห่งพระราชบัญญัติ ..." .
+
+nbtc:citesSection a owl:ObjectProperty ;
+    rdfs:label "CITES_SECTION" ;
+    rdfs:domain nbtc:Chunk ;
+    rdfs:range nbtc:ActSection ;
+    rdfs:comment "ก้อนตัวบทนี้อ้างถึงมาตรานี้ เส้นนี้คือเส้นที่ทำให้ข้อห้ามฉบับหนึ่งเดินไปถึงบทลงโทษในอีกฉบับได้" .
+
+nbtc:citesClause a owl:ObjectProperty , owl:IrreflexiveProperty ;
+    rdfs:label "CITES_CLAUSE" ;
+    rdfs:domain nbtc:Chunk ;
+    rdfs:range nbtc:Chunk ;
+    rdfs:comment "ก้อนนี้อ้างถึงข้ออื่นในเอกสารเดียวกัน ตรวจแล้วไม่มีเส้นใดชี้กลับมาที่ตัวเอง และไม่มีเส้นใดข้ามเอกสาร" .
+
+nbtc:defines a owl:ObjectProperty ;
+    rdfs:label "DEFINES" ;
+    rdfs:domain nbtc:Chunk ;
+    rdfs:range nbtc:Definition ;
+    rdfs:comment "ก้อนนี้นิยามศัพท์คำนี้ ใช้ตอบคำถามว่าคำในประกาศหมายถึงอะไร" .
+
+# ส่วนที่ 3: ความสัมพันธ์ที่อนุมานได้ ไม่มีอยู่ในกราฟต้นฉบับ
+# นี่คือจุดที่ออนโทโลยีต่างจากการวาดแผนผังเฉย ๆ
+# กฎนี้คือการต่อโซ่สองเส้น  Chunk -citesSection-> ActSection -sectionOf-> Act
+# แล้วสรุปว่า              Chunk -citesAct------------------------------> Act
+# ประโยชน์ที่จับต้องได้คือตอบคำถาม "ก้อนนี้อยู่ใต้ พ.ร.บ. ฉบับไหน" ได้ในหนึ่งก้าว
+# แทนที่จะต้องเดินสองก้าว และคัดคำตอบข้ามฉบับผิดออกได้ตอนค้น
+
+nbtc:citesAct a owl:ObjectProperty ;
+    rdfs:label "CITES_ACT" ;
+    rdfs:domain nbtc:Chunk ;
+    rdfs:range nbtc:Act ;
+    owl:propertyChainAxiom ( nbtc:citesSection nbtc:sectionOf ) ;
+    nbtc:inferred "true" ;
+    rdfs:comment "อนุมานจาก citesSection ต่อ sectionOf รันแล้วได้ 441 เส้นใหม่ ครอบคลุม 417 ก้อนจาก 789 ก้อน" .
+
+# ส่วนที่ 4: เงื่อนไขที่ OWL เขียนตรง ๆ ไม่ได้ ตัวตรวจบังคับให้ด้วยโค้ด
+# เลขมาตราต้องเป็นจำนวนเต็มบวกและไม่เกินจำนวนมาตราที่ พ.ร.บ. ฉบับนั้นมีจริง
+# ข้อนี้สำคัญเพราะเลขเชิงอรรถในราชกิจจานุเบกษาพิมพ์ติดกับเลขมาตรา
+# ทำให้ได้มาตราที่ไม่มีอยู่จริงอย่าง มาตรา 7893 ถ้าไม่มีเงื่อนไขนี้จะไม่มีใครเห็น
+
+nbtc:ActSection rdfs:subClassOf [
+    a owl:Restriction ;
+    owl:onProperty nbtc:sectionNumber ;
+    owl:someValuesFrom xsd:positiveInteger
+] .
+
+nbtc:sectionNumber a owl:DatatypeProperty , owl:FunctionalProperty ;
+    rdfs:label "number" ;
+    rdfs:domain nbtc:ActSection ;
+    rdfs:range xsd:positiveInteger ;
+    nbtc:maxPlausible "200" ;
+    rdfs:comment "เลขมาตรา พ.ร.บ. ที่ยาวที่สุดในคลังมี 95 มาตรา ตั้งเพดานไว้ 200 เพื่อให้เหลือที่สำหรับฉบับแก้ไขเพิ่มเติม เกินเพดานถือว่าเลขเพี้ยน" .

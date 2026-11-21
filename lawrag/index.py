@@ -118,24 +118,61 @@ def insert_chunks(conn, rows: list[dict]) -> None:
 # ส่วนที่ 5: ขั้นที่หนึ่ง encode แล้วเก็บลงไฟล์
 # หน้าที่: แปลงข้อความทั้งชุดเป็นเวกเตอร์ ถ้าเคยทำไว้แล้วให้ใช้ของเดิม
 # ทำไมเก็บลงไฟล์: ขั้นนี้นานที่สุด ถ้าขั้นเขียนฐานข้อมูลพัง จะได้ไม่ต้อง encode ใหม่
+#
+# ทำไมต้องเก็บเป็นรายก้อน ไม่ใช่ทั้งอาเรย์
+#     เดิมเทียบแค่ขนาดอาเรย์ว่าเท่ากับจำนวน chunk ไหม พอเพิ่มกฎหมายเข้ามาหนึ่งฉบับ
+#     ขนาดเปลี่ยน แคชใช้ไม่ได้ทั้งก้อน ต้อง encode ใหม่ทั้ง 682 ก้อน กินเวลาเป็นชั่วโมง
+#     ทั้งที่ของเดิม 682 ก้อนนั้นข้อความไม่ได้เปลี่ยนเลย
+#     จึงเปลี่ยนมาเก็บกุญแจเป็น SHA-1 ของข้อความที่ encode จริง ๆ เรียงคู่กับอาเรย์
+#     ก้อนไหนข้อความเดิมก็หยิบเวกเตอร์เดิมมาใช้ ก้อนใหม่หรือก้อนที่ข้อความเปลี่ยนจึง encode
+#     ปลอดภัยเพราะ BGE-M3 ให้ผลคงที่ ข้อความเดียวกันได้เวกเตอร์เดียวกันเสมอ
+#     และถ้าข้อความเปลี่ยนแม้ตัวอักษรเดียว SHA-1 ก็เปลี่ยน แคชจะไม่ถูกใช้
+#
 # รับ: โมเดล, รายการ chunk, ชื่อชุด, ชื่อฟิลด์ · คืน: (เวกเตอร์, วินาทีที่ใช้ encode)
 def encode_variant(model, rows: list[dict], variant: str, field: str):
+    import hashlib
+
     import numpy as np
+
     path = os.path.join(LAW_DIR, f"emb_{variant}.npy")
-    if os.path.exists(path):
-        vecs = np.load(path)
-        if vecs.shape == (len(rows), DIM):
-            print("   มี emb_%s.npy อยู่แล้ว ข้าม encode" % variant, flush=True)
-            return vecs, 0.0
-        # ขนาดไม่ตรงแปลว่า chunk เปลี่ยนไปแล้ว ของเดิมใช้ไม่ได้
-        print("   emb_%s.npy ขนาด %s ไม่ตรงกับ chunk %d ก้อน จะ encode ใหม่"
-              % (variant, vecs.shape, len(rows)), flush=True)
+    keys_path = os.path.join(LAW_DIR, f"emb_{variant}_keys.json")
+    want = [hashlib.sha1(r[field].encode("utf-8")).hexdigest() for r in rows]
+
+    cache: dict[str, "np.ndarray"] = {}
+    if os.path.exists(path) and os.path.exists(keys_path):
+        old_vecs = np.load(path)
+        old_keys = json.load(open(keys_path, encoding="utf-8"))
+        if len(old_keys) == old_vecs.shape[0] and old_vecs.shape[1] == DIM:
+            cache = {k: old_vecs[i] for i, k in enumerate(old_keys)}
+        else:
+            print("   แคช emb_%s เสียรูป จะ encode ใหม่ทั้งหมด" % variant, flush=True)
+    elif os.path.exists(path):
+        # แคชรุ่นเก่าที่ยังไม่มีไฟล์กุญแจ ใช้ได้ต่อเมื่อจำนวนก้อนยังเท่าเดิมเป๊ะ
+        old_vecs = np.load(path)
+        if old_vecs.shape == (len(rows), DIM):
+            print("   แคช emb_%s รุ่นเก่า จำนวนก้อนตรงกัน ใช้ต่อและเขียนกุญแจกำกับ"
+                  % variant, flush=True)
+            np.save(path, old_vecs)
+            json.dump(want, open(keys_path, "w", encoding="utf-8"))
+            return old_vecs, 0.0
+
+    todo = [i for i, k in enumerate(want) if k not in cache]
+    print("   emb_%s ใช้ของเดิม %d ก้อน ต้อง encode ใหม่ %d ก้อน"
+          % (variant, len(rows) - len(todo), len(todo)), flush=True)
+
     t0 = time.time()
-    vecs = model.encode([r[field] for r in rows], batch_size=BATCH,
-                        normalize_embeddings=True, show_progress_bar=False)
-    vecs = np.asarray(vecs, dtype="float32")
+    if todo:
+        fresh = model.encode([rows[i][field] for i in todo], batch_size=BATCH,
+                             normalize_embeddings=True, show_progress_bar=False)
+        fresh = np.asarray(fresh, dtype="float32")
+        for n, i in enumerate(todo):
+            cache[want[i]] = fresh[n]
+    sec = time.time() - t0
+
+    vecs = np.vstack([cache[k] for k in want]).astype("float32")
     np.save(path, vecs)
-    return vecs, time.time() - t0
+    json.dump(want, open(keys_path, "w", encoding="utf-8"))
+    return vecs, sec
 
 
 # ส่วนที่ 5.1: ขั้นที่สาม เขียนเวกเตอร์ลง pgvector

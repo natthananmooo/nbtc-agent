@@ -26,6 +26,7 @@ lawrag/contextualize.py - ให้ LLM เขียนคำบรรยาย�
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -177,11 +178,24 @@ def main() -> int:
 
     rows = json.load(open(IN_PATH, encoding="utf-8"))
     # รันต่อจากของเดิมได้ ถ้าเคยทำไว้แล้วก็ไม่เรียกซ้ำ ประหยัดทั้งเงินและเวลา
+    # กุญแจของการ "เคยทำแล้ว" คือ id คู่กับลายนิ้วมือของข้อความ ไม่ใช่ id เดี่ยว ๆ
+    # เพราะวันที่ 2026-11-21 เราซ่อมอักขระ PUA ใน 01_act กับ 15_keyword ไป 109 ก้อน
+    # id เท่าเดิมแต่ตัวบทเปลี่ยน บริบทที่เขียนไว้ตอนตัวบทยังเป็นขยะจึงไม่ควรเอามาใช้ต่อ
     done: dict[str, str] = {}
     if os.path.exists(OUT_PATH) and not args.redo:
+        cur_sha = {r["id"]: hashlib.sha1(r["text"].encode("utf-8")).hexdigest()
+                   for r in rows}
+        stale = 0
         for r in json.load(open(OUT_PATH, encoding="utf-8")):
-            if r.get("context"):
-                done[r["id"]] = r["context"]
+            if not r.get("context"):
+                continue
+            sha = r.get("text_sha")
+            if sha is not None and cur_sha.get(r["id"]) != sha:
+                stale += 1
+                continue
+            done[r["id"]] = r["context"]
+        if stale:
+            print("ตัวบทเปลี่ยนไป %d ก้อน จะเขียนบริบทใหม่ให้" % stale)
 
     by_doc: dict[str, list[dict]] = {}
     for r in rows:
@@ -216,6 +230,7 @@ def main() -> int:
         ctx = done.get(r["id"], "")
         r2 = dict(r)
         r2["context"] = ctx
+        r2["text_sha"] = hashlib.sha1(r["text"].encode("utf-8")).hexdigest()
         r2["text_contextual"] = (ctx + "\n\n" + r["text"]) if ctx else r["text"]
         out.append(r2)
     json.dump(out, open(OUT_PATH, "w", encoding="utf-8"), ensure_ascii=False, indent=1)

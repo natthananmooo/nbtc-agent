@@ -52,8 +52,13 @@ RE_PAGE_HDR2 = re.compile(r"^\s*เล่ม\s+[๐-๙\d]+\s+ตอน")
 
 RE_MUAD = re.compile(r"^\s*หมวด\s+([๐-๙\d]+)\s*$")  # หมวด ๑
 RE_SUAN = re.compile(r"^\s*ส่วนที่\s+([๐-๙\d]+)\s*$")  # ส่วนที่ ๒
-RE_KHOR = re.compile(r"^\s*ข้อ\s+([๐-๙\d]+)\s")  # ข้อ ๕ ใช้กับประกาศและระเบียบ
-RE_MATRA_HEAD = re.compile(r"^\s*มาตรา\s+([๐-๙\d]+)\s")  # มาตรา ๕ ใช้กับ พ.ร.บ.
+# ท้ายเลขข้อใช้ (?!...) แทนการบังคับให้มีช่องว่าง
+# เพราะตัวบทจริงมีที่พิมพ์ติดกันอยู่ เช่น 30_protect เขียนว่า "ข้อ ๒๒ในกรณีที่..."
+# ของเดิมมองไม่เห็นว่าขึ้นข้อใหม่ เนื้อของข้อ ๒๒ จึงถูกกลืนไปต่อท้ายข้อ ๒๑ ทั้งข้อ
+# ที่ต้องกันไว้คือ / กับ . เพราะ "มาตรา ๑๔/๑" และ "ข้อ ๙.๗" เป็นอนุข้อ ไม่ใช่หัวข้อใหม่
+# ตรวจกับทั้งคลังแล้ว ได้หัวข้อเพิ่ม 3 จุด และไม่มีหัวข้อเดิมหายไปเลย
+RE_KHOR = re.compile(r"^\s*ข้อ\s+([๐-๙\d]+)(?![๐-๙\d/.])")  # ข้อ ๕ ใช้กับประกาศและระเบียบ
+RE_MATRA_HEAD = re.compile(r"^\s*มาตรา\s+([๐-๙\d]+)(?![๐-๙\d/.])")  # มาตรา ๕ ใช้กับ พ.ร.บ.
 
 # ภาคผนวกคือเอกสารแนบท้าย ไม่ใช่เนื้อของข้อสุดท้าย
 # ถ้าไม่แยก ข้อสุดท้ายจะกวาดตารางตัวชี้วัดทั้งหมดเข้ามา วัดจริงได้ 19 ตอนติดกัน
@@ -262,8 +267,20 @@ def main() -> int:
     man_path = os.path.join(LAW_DIR, "manifest.csv")
     man = list(csv.DictReader(open(man_path, encoding="utf-8")))
 
+    # ฉบับที่แกะข้อความได้แต่ตั้งใจไม่เอาเข้าคลัง อ่านจาก corpus_exclude.csv
+    # ทำเป็นไฟล์แยกแทนการลบ .txt ทิ้ง เพราะรัน extract.py ใหม่เมื่อไรไฟล์ก็กลับมา
+    # และเหตุผลที่ไม่เอาควรอยู่ในโปรเจกต์ให้คนอ่านทีหลังเห็น ไม่ใช่อยู่ในหัวคนทำ
+    ex_path = os.path.join(LAW_DIR, "corpus_exclude.csv")
+    excluded = {}
+    if os.path.exists(ex_path):
+        for r in csv.DictReader(open(ex_path, encoding="utf-8")):
+            excluded[r["file"]] = r["reason"]
+
     rows, skipped = [], []
     for m in man:
+        if m["file"] in excluded:
+            skipped.append((m["file"], "ไม่เอาเข้าคลัง %s" % excluded[m["file"]][:60]))
+            continue
         txt_path = os.path.join(LAW_DIR, "txt", m["file"].replace(".pdf", ".txt"))
         if not os.path.exists(txt_path):
             skipped.append((m["file"], "ไม่มีไฟล์ข้อความ"))

@@ -102,16 +102,17 @@ def main() -> int:
                     help="ชื่อวิธีคั่นด้วยจุลภาค เว้นว่างคือทำทุกวิธี")
     ap.add_argument("--k", type=int, default=20,
                     help="นับว่าเจอถ้าเฉลยอยู่ใน k อันดับแรก")
+    ap.add_argument("--questions", default=Q_PATH,
+                    help="ไฟล์คำถาม ใช้สลับชุดได้ เช่นชุดคำถามข้ามข้อของการทดลองที่สอง")
     ap.add_argument("--out", default=OUT_PATH)
     ap.add_argument("--fresh", action="store_true",
                     help="ไม่อ่านผลเดิม เริ่มนับหนึ่งใหม่")
     a = ap.parse_args()
 
-    if not os.path.exists(Q_PATH):
-        print("ไม่พบ %s ให้สร้างจาก eval/law_questions.yaml ก่อน" % Q_PATH,
-              file=sys.stderr)
+    if not os.path.exists(a.questions):
+        print("ไม่พบ %s ให้สร้างจากไฟล์ yaml ก่อน" % a.questions, file=sys.stderr)
         return 1
-    questions = json.load(open(Q_PATH, encoding="utf-8"))["questions"]
+    questions = json.load(open(a.questions, encoding="utf-8"))["questions"]
     if a.limit:
         questions = questions[:a.limit]
 

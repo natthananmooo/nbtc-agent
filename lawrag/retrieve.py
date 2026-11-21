@@ -32,6 +32,7 @@ EMBED_MODEL = os.environ.get("EMBED_MODEL", "BAAI/bge-m3")
 RERANK_MODEL = os.environ.get("RERANK_MODEL", "BAAI/bge-reranker-v2-m3")
 
 RRF_K = 60        # ค่ามาตรฐานของ RRF ยิ่งมากยิ่งให้อันดับท้าย ๆ มีน้ำหนักใกล้อันดับต้น
+GRAPH_SLOTS = 5     # จำนวนช่องท้ายที่กันไว้ให้ของที่เดินกราฟมา ดูเหตุผลใน search
 CAND = 30         # จำนวนผู้เข้าชิงที่ส่งให้ cross-encoder จัดอันดับใหม่
 GRAPH_HOPS = 2
 GRAPH_CAP = 25
@@ -182,11 +183,20 @@ class LawRetriever:
         if use_rerank:
             fused = self.rerank(query, fused[:CAND], variant, k)
         if use_graph:
-            # เอาผลที่จัดอันดับแล้วไว้ก่อน ตามด้วยสิ่งที่เดินกราฟไปเจอ
-            # ไม่เอาไปรวมแล้วจัดอันดับใหม่ เพราะของที่เดินกราฟมาได้มาด้วยเหตุผลคนละแบบ
-            # มันเกี่ยวข้องเพราะถูกอ้างถึง ไม่ใช่เพราะข้อความคล้ายคำถาม
-            extra = self.expand(fused[:5])
-            fused = fused + [e for e in extra if e not in fused]
+            # ของที่เดินกราฟมาได้ ไม่ได้เอาไปจัดอันดับรวมกับผลค้น
+            # เพราะมันเกี่ยวข้องเพราะถูกอ้างถึง ไม่ใช่เพราะข้อความคล้ายคำถาม
+            # ถ้าให้ cross-encoder ให้คะแนนรวมกัน มันจะถูกตัดทิ้งทันที
+            #
+            # บั๊กที่เจอตอนวัดผลรอบแรก ของเดิมเขียนว่า fused = fused + extra
+            # แต่ rerank คืนมาครบ k ตัวพอดีอยู่แล้ว ของที่ต่อท้ายจึงอยู่ที่อันดับ k+1
+            # แล้วถูก fused[:k] ตัดทิ้งทั้งหมด กราฟจึงไม่เคยมีผลเลยแม้แต่ครั้งเดียว
+            # วัดแล้วพบว่าแขนกราฟให้ผลเหมือนแขน rerank เป๊ะทั้ง 50 คำถาม
+            #
+            # จึงกันช่องท้ายไว้ให้ชัดเจน ผลค้น k-GRAPH_SLOTS ช่อง และกราฟ GRAPH_SLOTS ช่อง
+            # เป็นงบประมาณคงที่ ไม่ใช่การต่อท้ายแล้วหวังว่าจะเหลือที่
+            extra = [e for e in self.expand(fused[:5]) if e not in fused][:GRAPH_SLOTS]
+            keep = max(1, k - GRAPH_SLOTS)
+            fused = fused[:keep] + extra + fused[keep:]
         return fused[:k]
 
 

@@ -1,0 +1,282 @@
+{
+ "k": 20,
+ "n_questions": 50,
+ "methods": [
+  "embedding",
+  "embedding+bm25",
+  "rerank+embedding+bm25",
+  "ctx_embedding",
+  "ctx_embedding+ctx_bm25",
+  "rerank+ctx_embedding+bm25",
+  "graph+rerank+ctx"
+ ],
+ "graph_arm_recomputed": true,
+ "primary": {
+  "embedding": {
+   "failed": 2,
+   "total": 50,
+   "failure_rate": 0.04,
+   "missed": [
+    "L20",
+    "L47"
+   ]
+  },
+  "embedding+bm25": {
+   "failed": 2,
+   "total": 50,
+   "failure_rate": 0.04,
+   "missed": [
+    "L32",
+    "L48"
+   ]
+  },
+  "rerank+embedding+bm25": {
+   "failed": 0,
+   "total": 50,
+   "failure_rate": 0.0,
+   "missed": []
+  },
+  "ctx_embedding": {
+   "failed": 2,
+   "total": 50,
+   "failure_rate": 0.04,
+   "missed": [
+    "L20",
+    "L45"
+   ]
+  },
+  "ctx_embedding+ctx_bm25": {
+   "failed": 1,
+   "total": 50,
+   "failure_rate": 0.02,
+   "missed": [
+    "L32"
+   ]
+  },
+  "rerank+ctx_embedding+bm25": {
+   "failed": 1,
+   "total": 50,
+   "failure_rate": 0.02,
+   "missed": [
+    "L32"
+   ]
+  },
+  "graph+rerank+ctx": {
+   "failed": 1,
+   "total": 50,
+   "failure_rate": 0.02,
+   "missed": [
+    "L32"
+   ]
+  }
+ },
+ "sensitivity": {
+  "embedding": {
+   "failed": 2,
+   "total": 50,
+   "failure_rate": 0.04,
+   "missed": [
+    "L20",
+    "L47"
+   ]
+  },
+  "embedding+bm25": {
+   "failed": 1,
+   "total": 50,
+   "failure_rate": 0.02,
+   "missed": [
+    "L48"
+   ]
+  },
+  "rerank+embedding+bm25": {
+   "failed": 0,
+   "total": 50,
+   "failure_rate": 0.0,
+   "missed": []
+  },
+  "ctx_embedding": {
+   "failed": 1,
+   "total": 50,
+   "failure_rate": 0.02,
+   "missed": [
+    "L20"
+   ]
+  },
+  "ctx_embedding+ctx_bm25": {
+   "failed": 0,
+   "total": 50,
+   "failure_rate": 0.0,
+   "missed": []
+  },
+  "rerank+ctx_embedding+bm25": {
+   "failed": 0,
+   "total": 50,
+   "failure_rate": 0.0,
+   "missed": []
+  },
+  "graph+rerank+ctx": {
+   "failed": 0,
+   "total": 50,
+   "failure_rate": 0.0,
+   "missed": []
+  }
+ },
+ "sensitivity_note": "เฉลยทางเลือกนี้ตัดสินหลังเห็นผลการทดลอง จึงไม่ใช่ผลหลัก",
+ "by_kind": {
+  "embedding": {
+   "annex": {
+    "failed": 1,
+    "total": 3
+   },
+   "cross_ref": {
+    "failed": 0,
+    "total": 3
+   },
+   "easy": {
+    "failed": 0,
+    "total": 20
+   },
+   "numeric": {
+    "failed": 0,
+    "total": 6
+   },
+   "vocab_gap": {
+    "failed": 1,
+    "total": 18
+   }
+  },
+  "embedding+bm25": {
+   "annex": {
+    "failed": 0,
+    "total": 3
+   },
+   "cross_ref": {
+    "failed": 1,
+    "total": 3
+   },
+   "easy": {
+    "failed": 1,
+    "total": 20
+   },
+   "numeric": {
+    "failed": 0,
+    "total": 6
+   },
+   "vocab_gap": {
+    "failed": 0,
+    "total": 18
+   }
+  },
+  "rerank+embedding+bm25": {
+   "annex": {
+    "failed": 0,
+    "total": 3
+   },
+   "cross_ref": {
+    "failed": 0,
+    "total": 3
+   },
+   "easy": {
+    "failed": 0,
+    "total": 20
+   },
+   "numeric": {
+    "failed": 0,
+    "total": 6
+   },
+   "vocab_gap": {
+    "failed": 0,
+    "total": 18
+   }
+  },
+  "ctx_embedding": {
+   "annex": {
+    "failed": 1,
+    "total": 3
+   },
+   "cross_ref": {
+    "failed": 0,
+    "total": 3
+   },
+   "easy": {
+    "failed": 0,
+    "total": 20
+   },
+   "numeric": {
+    "failed": 0,
+    "total": 6
+   },
+   "vocab_gap": {
+    "failed": 1,
+    "total": 18
+   }
+  },
+  "ctx_embedding+ctx_bm25": {
+   "annex": {
+    "failed": 0,
+    "total": 3
+   },
+   "cross_ref": {
+    "failed": 1,
+    "total": 3
+   },
+   "easy": {
+    "failed": 0,
+    "total": 20
+   },
+   "numeric": {
+    "failed": 0,
+    "total": 6
+   },
+   "vocab_gap": {
+    "failed": 0,
+    "total": 18
+   }
+  },
+  "rerank+ctx_embedding+bm25": {
+   "annex": {
+    "failed": 0,
+    "total": 3
+   },
+   "cross_ref": {
+    "failed": 1,
+    "total": 3
+   },
+   "easy": {
+    "failed": 0,
+    "total": 20
+   },
+   "numeric": {
+    "failed": 0,
+    "total": 6
+   },
+   "vocab_gap": {
+    "failed": 0,
+    "total": 18
+   }
+  },
+  "graph+rerank+ctx": {
+   "annex": {
+    "failed": 0,
+    "total": 3
+   },
+   "cross_ref": {
+    "failed": 1,
+    "total": 3
+   },
+   "easy": {
+    "failed": 0,
+    "total": 20
+   },
+   "numeric": {
+    "failed": 0,
+    "total": 6
+   },
+   "vocab_gap": {
+    "failed": 0,
+    "total": 18
+   }
+  }
+ },
+ "mean_seconds_note": "เวลาในผลดิบเป็นต้นทุนส่วนเพิ่มเมื่อรันต่อจากวิธีก่อนหน้า เพราะมี cache ของเวกเตอร์คำถามและผล rerank ไม่ใช่ต้นทุนถ้ารันเดี่ยว"
+}
